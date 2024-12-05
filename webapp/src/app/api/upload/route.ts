@@ -13,6 +13,20 @@ const minioClient = new Client({
 
 const BUCKET_NAME = 'content'
 
+async function downloadVideo(url: string): Promise<Buffer> {
+  const response = await fetch(url)
+  if (!response.ok) {
+    throw new Error(`Failed to download video: ${response.statusText}`)
+  }
+  
+  const contentType = response.headers.get('content-type')
+  if (!contentType?.startsWith('video/')) {
+    throw new Error('URL does not point to a video file')
+  }
+
+  return Buffer.from(await response.arrayBuffer())
+}
+
 export async function POST(request: Request) {
   try {
     // Ensure bucket exists
@@ -21,21 +35,43 @@ export async function POST(request: Request) {
       await minioClient.makeBucket(BUCKET_NAME)
     }
 
-    const formData = await request.formData()
-    const file = formData.get('file') as File
+    let buffer: Buffer
+    let fileName: string
+    let contentType: string
 
-    if (!file) {
-      return NextResponse.json(
-        { error: 'No file provided' },
-        { status: 400 }
-      )
+    // Check if this is a URL upload or file upload
+    const contentTypeHeader = request.headers.get('content-type')
+    if (contentTypeHeader?.includes('application/json')) {
+      // Handle URL upload
+      const { url } = await request.json()
+      if (!url) {
+        return NextResponse.json({ error: 'No URL provided' }, { status: 400 })
+      }
+
+      buffer = await downloadVideo(url)
+      fileName = url.split('/').pop() || 'video.mp4'
+      contentType = 'video/mp4' // Default to MP4 for URL uploads
+    } else {
+      // Handle file upload
+      const formData = await request.formData()
+      const file = formData.get('file') as File
+
+      if (!file) {
+        return NextResponse.json(
+          { error: 'No file provided' },
+          { status: 400 }
+        )
+      }
+
+      buffer = Buffer.from(await file.arrayBuffer())
+      fileName = file.name
+      contentType = file.type
     }
 
-    const buffer = Buffer.from(await file.arrayBuffer())
-    const objectName = `${Date.now()}-${file.name}`
+    const objectName = `${Date.now()}-${fileName}`
 
     await minioClient.putObject(BUCKET_NAME, objectName, buffer, {
-      'Content-Type': file.type,
+      'Content-Type': contentType,
     })
 
     // Get temporary URL for the uploaded file
@@ -57,7 +93,7 @@ export async function POST(request: Request) {
   } catch (error) {
     console.error('Upload error:', error)
     return NextResponse.json(
-      { error: 'Upload failed' },
+      { error: error instanceof Error ? error.message : 'Upload failed' },
       { status: 500 }
     )
   }
