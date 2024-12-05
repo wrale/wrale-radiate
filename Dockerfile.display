@@ -4,7 +4,6 @@ WORKDIR /app
 
 # Copy package.json first
 COPY display/package.json ./
-COPY display/.npmrc ./
 
 # Install dependencies and generate package-lock.json
 RUN npm install
