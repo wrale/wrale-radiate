@@ -1,5 +1,3 @@
-import { Server } from 'socket.io';
-import { NextApiResponseServerIO } from '@/types/next';
 import { NextRequest } from 'next/server';
 
 // Use Edge Runtime
