@@ -6,7 +6,6 @@ import type { Socket } from 'socket.io'
 export const config = {
   api: {
     bodyParser: false,
-    externalResolver: true
   }
 }
 
@@ -18,20 +17,43 @@ type NextApiResponseServerIO = NextApiResponse & {
   }
 }
 
+const allowedOrigins = [
+  'http://localhost:3000',
+  'http://localhost:3001',
+  'http://127.0.0.1:3000',
+  'http://127.0.0.1:3001'
+]
+
 const ioHandler = (req: NextApiRequest, res: NextApiResponseServerIO) => {
+  // Set CORS headers
+  const origin = req.headers.origin
+  if (origin && allowedOrigins.includes(origin)) {
+    res.setHeader('Access-Control-Allow-Origin', origin)
+    res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,POST')
+    res.setHeader('Access-Control-Allow-Headers', '*')
+    res.setHeader('Access-Control-Allow-Credentials', 'true')
+  }
+
+  // Handle preflight requests
+  if (req.method === 'OPTIONS') {
+    res.status(200).end()
+    return
+  }
+
   if (!res.socket.server.io) {
     console.log('Initializing Socket.IO...')
     const io = new SocketIOServer(res.socket.server, {
       path: '/api/socket',
       addTrailingSlash: false,
       cors: {
-        origin: true, // Let middleware handle actual CORS
+        origin: allowedOrigins,
         methods: ['GET', 'POST'],
-        credentials: true
+        credentials: true,
+        allowedHeaders: ['*']
       },
-      transports: ['polling', 'websocket'],
       connectTimeout: 45000,
-      pingTimeout: 30000
+      pingTimeout: 30000,
+      transports: ['polling', 'websocket']
     })
 
     io.on('connection', (socket: Socket) => {
