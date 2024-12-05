@@ -17,6 +17,8 @@ services:
       - MINIO_PORT=9000
       - MINIO_ACCESS_KEY=minioadmin
       - MINIO_SECRET_KEY=minioadmin
+    networks:
+      - wrale-net
     depends_on:
       - minio
 
@@ -32,6 +34,8 @@ services:
       - MINIO_ROOT_USER=minioadmin
       - MINIO_ROOT_PASSWORD=minioadmin
     command: server --console-address ":9001" /data
+    networks:
+      - wrale-net
 
   # Display client simulator (for testing)
   display-client:
@@ -41,9 +45,16 @@ services:
     ports:
       - "3001:3000"
     environment:
+      # This will be replaced with actual hostname in browser
       - NEXT_PUBLIC_SERVER_URL=http://localhost:3000
+    networks:
+      - wrale-net
     depends_on:
       - webapp
+
+networks:
+  wrale-net:
+    driver: bridge
 
 volumes:
   minio_data:
