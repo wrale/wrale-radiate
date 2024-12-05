@@ -12,3 +12,8 @@ export interface PlayMessage {
 }
 
 export type WebSocketMessage = DisplayHealthMessage | PlayMessage
+
+// Keep CustomWebSocket for upload route compatibility
+export interface CustomWebSocket extends WebSocket {
+  send(data: string | Buffer): void
+}
