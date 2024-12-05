@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server'
 import { Client } from 'minio'
+import type { WebSocketServer } from 'ws'
+import type { CustomWebSocket, WebSocketMessage } from '@/lib/types'
 
 const minioClient = new Client({
   endPoint: process.env.MINIO_ENDPOINT || 'localhost',
@@ -40,13 +42,14 @@ export async function POST(request: Request) {
     const url = await minioClient.presignedGetObject(BUCKET_NAME, objectName)
 
     // Broadcast to all connected displays
-    const wsServer = (global as any).wsServer
+    const wsServer = (global as any).wsServer as WebSocketServer
     if (wsServer) {
-      wsServer.clients.forEach((client) => {
-        client.send(JSON.stringify({
-          type: 'play',
-          url
-        }))
+      const message: WebSocketMessage = {
+        type: 'play',
+        url
+      }
+      wsServer.clients.forEach((client: CustomWebSocket) => {
+        client.send(JSON.stringify(message))
       })
     }
 
