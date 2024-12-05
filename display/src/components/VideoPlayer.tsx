@@ -28,12 +28,12 @@ export const VideoPlayer = () => {
 
       const socket = io(serverUrl, {
         path: '/api/socket',
-        transports: ['polling', 'websocket'],
+        transports: ['websocket'], // Force WebSocket only
         reconnection: true,
         reconnectionDelay: 1000,
         reconnectionDelayMax: 5000,
         reconnectionAttempts: 10,
-        withCredentials: true,
+        forceNew: true,
         timeout: 45000
       })
 
