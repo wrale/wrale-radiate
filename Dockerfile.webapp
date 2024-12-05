@@ -4,6 +4,7 @@ WORKDIR /app
 
 # Copy package.json first
 COPY webapp/package.json ./
+COPY webapp/.npmrc ./
 
 # Install dependencies and generate package-lock.json
 RUN npm install
