@@ -6,10 +6,10 @@ Wrale Radiate is a digital signage management system built to handle video conte
 
 ## Features
 
-✅ Upload and distribute video content
-✅ Real-time display health monitoring
-✅ Basic display simulation
-✅ Content delivery verification
+- ✅ Upload and distribute video content
+- ✅ Real-time display health monitoring
+- ✅ Basic display simulation
+- ✅ Content delivery verification
 
 ## System Overview
 
