@@ -8,6 +8,7 @@ export const VideoPlayer = () => {
   const socketRef = useRef<Socket | null>(null)
   const [status, setStatus] = useState<'connecting' | 'ready' | 'playing' | 'error'>('connecting')
   const [error, setError] = useState<string>('')
+  const [retryCount, setRetryCount] = useState(0)
 
   useEffect(() => {
     const serverUrl = process.env.NEXT_PUBLIC_SERVER_URL
@@ -20,20 +21,27 @@ export const VideoPlayer = () => {
     try {
       console.log('Connecting to server:', serverUrl)
 
+      // Close existing connection if any
+      if (socketRef.current?.connected) {
+        socketRef.current.close()
+      }
+
       const socket = io(serverUrl, {
         path: '/api/socket',
-        transports: ['websocket', 'polling'],
+        transports: ['polling', 'websocket'],
         reconnection: true,
-        reconnectionAttempts: Infinity,
-        reconnectionDelay: 5000,
+        reconnectionDelay: 1000,
+        reconnectionDelayMax: 5000,
+        reconnectionAttempts: 10
       })
 
       socketRef.current = socket
 
       socket.on('connect', () => {
-        console.log('Socket.IO connected, ID:', socket.id)
+        console.log('Connected with ID:', socket.id)
         setStatus('ready')
         setError('')
+        setRetryCount(0)
       })
 
       socket.on('message', (msg) => {
@@ -50,17 +58,18 @@ export const VideoPlayer = () => {
       })
 
       socket.on('connected', (data) => {
-        console.log('Connection acknowledged:', data)
+        console.log('Server acknowledged connection:', data)
       })
 
       socket.on('connect_error', (err) => {
-        console.error('Socket.IO connection error:', err)
+        console.error('Connection error:', err)
         setError(`Connection error: ${err.message}`)
         setStatus('error')
+        setRetryCount((prev) => prev + 1)
       })
 
       socket.on('disconnect', (reason) => {
-        console.log('Socket.IO disconnected:', reason)
+        console.log('Disconnected:', reason)
         setStatus('connecting')
       })
 
@@ -75,16 +84,21 @@ export const VideoPlayer = () => {
         }
       }, 5000)
 
+      // Set up automatic reconnection
+      socket.io.on('reconnect_attempt', (attempt) => {
+        console.log(`Reconnection attempt ${attempt}`)
+      })
+
       return () => {
         clearInterval(healthInterval)
-        socket.disconnect()
+        socket.close()
       }
     } catch (err) {
       console.error('Error setting up Socket.IO:', err)
       setError('Failed to connect')
       setStatus('error')
     }
-  }, [])
+  }, [retryCount]) // Recreate socket when retry count changes
 
   return (
     <div className="relative h-screen">
@@ -98,7 +112,7 @@ export const VideoPlayer = () => {
       {status !== 'playing' && (
         <div className="absolute inset-0 flex items-center justify-center text-white bg-black bg-opacity-50">
           <span className="text-xl font-semibold">
-            {status === 'connecting' && 'Connecting...'}
+            {status === 'connecting' && `Connecting${retryCount > 0 ? ` (Attempt ${retryCount})` : ''}...`}
             {status === 'ready' && 'Ready for content'}
             {status === 'error' && `Error: ${error}`}
           </span>
