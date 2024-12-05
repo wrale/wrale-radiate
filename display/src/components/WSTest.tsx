@@ -1,66 +1,83 @@
 "use client"
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState } from 'react'
+import { io, Socket } from 'socket.io-client'
 
 export function WSTest() {
+  const [socket, setSocket] = useState<Socket | null>(null)
   const [status, setStatus] = useState<string>('Initializing...')
   const [messages, setMessages] = useState<string[]>([])
-  const [retryCount, setRetryCount] = useState(0)
-
-  const connect = useCallback(() => {
-    // Determine WebSocket URL based on current host
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-    const wsUrl = `${protocol}//${window.location.hostname}:3000/api/ws`
-    console.log('Connecting to WebSocket:', wsUrl)
-
-    const ws = new WebSocket(wsUrl)
-
-    ws.addEventListener('open', () => {
-      console.log('WebSocket connected')
-      setStatus('Connected')
-      setRetryCount(0)
-      ws.send('Hello from client!')
-    })
-
-    ws.addEventListener('message', (event) => {
-      console.log('Message received:', event.data)
-      setMessages(prev => [...prev, event.data])
-    })
-
-    ws.addEventListener('error', (error) => {
-      console.error('WebSocket error:', error)
-      setStatus('Error occurred')
-    })
-
-    ws.addEventListener('close', () => {
-      console.log('WebSocket closed')
-      setStatus('Disconnected - Retrying...')
-      setRetryCount(prev => prev + 1)
-      // Exponential backoff for reconnection
-      const timeout = Math.min(1000 * Math.pow(2, retryCount), 10000)
-      setTimeout(() => connect(), timeout)
-    })
-
-    return ws
-  }, [retryCount])
 
   useEffect(() => {
-    const ws = connect()
+    const socketUrl = `http://${window.location.hostname}:3000`
+    console.log('Connecting to socket server:', socketUrl)
+
+    const socketIo = io(socketUrl, {
+      path: '/api/socket',
+      transports: ['websocket'],
+      reconnectionDelay: 1000,
+      reconnectionDelayMax: 5000,
+      reconnectionAttempts: 10
+    })
+
+    socketIo.on('connect', () => {
+      console.log('Socket connected:', socketIo.id)
+      setStatus('Connected')
+    })
+
+    socketIo.on('welcome', (msg) => {
+      console.log('Welcome message:', msg)
+      setMessages(prev => [...prev, `Server: ${msg}`])
+    })
+
+    socketIo.on('message', (msg) => {
+      console.log('Message received:', msg)
+      setMessages(prev => [...prev, `Received: ${msg}`])
+    })
+
+    socketIo.on('disconnect', () => {
+      console.log('Socket disconnected')
+      setStatus('Disconnected - Waiting for reconnection...')
+    })
+
+    socketIo.on('connect_error', (error) => {
+      console.error('Connection error:', error)
+      setStatus(`Connection error: ${error.message}`)
+    })
+
+    setSocket(socketIo)
+
     return () => {
-      ws.close()
+      socketIo.disconnect()
     }
-  }, [connect])
+  }, [])
+
+  const sendTestMessage = () => {
+    if (socket?.connected) {
+      const msg = `Test message at ${new Date().toISOString()}`
+      socket.emit('message', msg)
+      setMessages(prev => [...prev, `Sent: ${msg}`])
+    }
+  }
 
   return (
     <div className="p-4">
       <h2 className="text-xl font-bold mb-4">WebSocket Test</h2>
       <div className="mb-4">
         <strong>Status:</strong> {status}
-        {retryCount > 0 && ` (Attempt ${retryCount})`}
+      </div>
+      <div className="mb-4">
+        <button
+          onClick={sendTestMessage}
+          disabled={!socket?.connected}
+          className="px-4 py-2 text-white bg-blue-500 rounded disabled:bg-gray-300"
+        >
+          Send Test Message
+        </button>
       </div>
       <div>
         <strong>Messages:</strong>
-        <ul className="list-disc pl-4">
+        <ul className="list-disc pl-4 mt-2 space-y-1">
           {messages.map((msg, i) => (
             <li key={i}>{msg}</li>
           ))}
