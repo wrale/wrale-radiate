@@ -37,6 +37,11 @@
 - [ ] Default settings file
 - [ ] Override mechanism
 
+### Dependencies (0%)
+- [ ] Investigate and resolve inflight memory leak warning
+- [ ] Audit and update dependencies as needed
+- [ ] Document dependency constraints and requirements
+
 ### Documentation (85%)
 - [x] Development setup
 - [x] Operations guide
