@@ -10,7 +10,7 @@ else
 COMPOSE_CMD := docker compose
 endif
 else
-COMPOSE_CMD := podman-compose
+COMPOSE_CMD := podman compose
 endif
 
 .PHONY: help
