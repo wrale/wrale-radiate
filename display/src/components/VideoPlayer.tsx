@@ -3,6 +3,20 @@
 import { useEffect, useRef, useState } from 'react'
 import { io, Socket } from 'socket.io-client'
 
+// Function to determine the correct WebSocket URL based on environment
+function getServerUrl() {
+  const env_url = process.env.NEXT_PUBLIC_SERVER_URL
+  if (!env_url) return null
+
+  // If we're in a browser (window exists) and the URL includes 'localhost',
+  // rewrite it to use the host's actual hostname
+  if (typeof window !== 'undefined' && env_url.includes('localhost')) {
+    return env_url.replace('localhost', window.location.hostname)
+  }
+
+  return env_url
+}
+
 export const VideoPlayer = () => {
   const videoRef = useRef<HTMLVideoElement>(null)
   const socketRef = useRef<Socket | null>(null)
@@ -11,7 +25,7 @@ export const VideoPlayer = () => {
   const [retryCount, setRetryCount] = useState(0)
 
   useEffect(() => {
-    const serverUrl = process.env.NEXT_PUBLIC_SERVER_URL
+    const serverUrl = getServerUrl()
     if (!serverUrl) {
       setError('Server URL not configured')
       setStatus('error')
