@@ -1,60 +1,62 @@
 "use client"
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 
 export function WSTest() {
   const [status, setStatus] = useState<string>('Initializing...')
   const [messages, setMessages] = useState<string[]>([])
+  const [retryCount, setRetryCount] = useState(0)
 
-  useEffect(() => {
-    // Get the correct server URL based on environment
-    const serverPort = process.env.NEXT_PUBLIC_SERVER_PORT || '3000'
-    const wsUrl = `ws://${window.location.hostname}:${serverPort}/api/ws`
+  const connect = useCallback(() => {
+    // Determine WebSocket URL based on current host
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+    const wsUrl = `${protocol}//${window.location.hostname}:3000/api/ws`
     console.log('Connecting to WebSocket:', wsUrl)
 
-    let reconnectTimer: NodeJS.Timeout
-    const connectWebSocket = () => {
-      const ws = new WebSocket(wsUrl)
+    const ws = new WebSocket(wsUrl)
 
-      ws.onopen = () => {
-        console.log('WebSocket connected')
-        setStatus('Connected')
-        ws.send('Hello from client!')
-      }
+    ws.addEventListener('open', () => {
+      console.log('WebSocket connected')
+      setStatus('Connected')
+      setRetryCount(0)
+      ws.send('Hello from client!')
+    })
 
-      ws.onmessage = (event) => {
-        console.log('Message received:', event.data)
-        setMessages(prev => [...prev, event.data])
-      }
+    ws.addEventListener('message', (event) => {
+      console.log('Message received:', event.data)
+      setMessages(prev => [...prev, event.data])
+    })
 
-      ws.onerror = (error) => {
-        console.error('WebSocket error:', error)
-        setStatus('Error: Connection failed')
-      }
+    ws.addEventListener('error', (error) => {
+      console.error('WebSocket error:', error)
+      setStatus('Error occurred')
+    })
 
-      ws.onclose = () => {
-        console.log('WebSocket closed')
-        setStatus('Disconnected - Retrying...')
-        // Try to reconnect after 2 seconds
-        reconnectTimer = setTimeout(connectWebSocket, 2000)
-      }
+    ws.addEventListener('close', () => {
+      console.log('WebSocket closed')
+      setStatus('Disconnected - Retrying...')
+      setRetryCount(prev => prev + 1)
+      // Exponential backoff for reconnection
+      const timeout = Math.min(1000 * Math.pow(2, retryCount), 10000)
+      setTimeout(() => connect(), timeout)
+    })
 
-      return ws
-    }
+    return ws
+  }, [retryCount])
 
-    const ws = connectWebSocket()
-
+  useEffect(() => {
+    const ws = connect()
     return () => {
-      clearTimeout(reconnectTimer)
       ws.close()
     }
-  }, [])
+  }, [connect])
 
   return (
     <div className="p-4">
       <h2 className="text-xl font-bold mb-4">WebSocket Test</h2>
       <div className="mb-4">
         <strong>Status:</strong> {status}
+        {retryCount > 0 && ` (Attempt ${retryCount})`}
       </div>
       <div>
         <strong>Messages:</strong>
