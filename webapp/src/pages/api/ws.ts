@@ -1,12 +1,12 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
-import { Server as WebSocketServer } from 'ws'
+import WebSocket from 'ws'
 import type { WebSocketMessage } from '@/lib/types'
 
-let wss: WebSocketServer | null = null
+let wss: WebSocket.Server | null = null
 
 export default function handler(req: NextApiRequest, res: NextApiResponse) {
   if (!wss) {
-    wss = new WebSocketServer({ noServer: true })
+    wss = new WebSocket.Server({ noServer: true })
 
     wss.on('connection', (ws) => {
       console.log('Client connected')
