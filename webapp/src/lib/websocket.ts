@@ -1,4 +1,4 @@
-import { Server as WebSocketServer } from 'ws';
+import { WebSocket, WebSocketServer } from 'ws';
 import type { Server } from 'http';
 
 let wss: WebSocketServer | null = null;
@@ -11,7 +11,7 @@ export function initWebSocket(server: Server) {
 
   wss = new WebSocketServer({ noServer: true });
 
-  wss.on('connection', (ws) => {
+  wss.on('connection', (ws: WebSocket) => {
     console.log('Client connected');
     ws.send('Connected to Wrale Radiate');
 
@@ -19,7 +19,7 @@ export function initWebSocket(server: Server) {
       console.log('Received:', message.toString());
       // Broadcast to all clients
       wss?.clients.forEach((client) => {
-        if (client.readyState === ws.OPEN) {
+        if (client.readyState === WebSocket.OPEN) {
           client.send(message.toString());
         }
       });
