@@ -8,8 +8,13 @@ COPY webapp/package.json ./
 # Install dependencies and generate package-lock.json
 RUN npm install
 
+# Copy TypeScript config
+COPY webapp/tsconfig.json ./
+COPY webapp/postcss.config.js ./
+COPY webapp/tailwind.config.js ./
+
 # Source
-COPY webapp .
+COPY webapp/src ./src
 
 # Build
 RUN npm run build
