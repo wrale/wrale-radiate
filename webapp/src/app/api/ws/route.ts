@@ -1,67 +1,66 @@
-import { WebSocketServer } from 'ws'
-import type { WebSocket as WSType } from 'ws'
-import type { WebSocketMessage } from '@/lib/types'
+import { WebSocket } from 'ws'
 
-type CustomWebSocket = WSType & {
-  displayId?: string
-}
+// Mark this route as using the Edge Runtime
+export const runtime = 'edge'
 
-const wss = new WebSocketServer({ noServer: true })
-const clients = new Set<CustomWebSocket>()
+// Store connected clients
+const clients = new Set<WebSocket>()
 
-wss.on('connection', (ws: CustomWebSocket) => {
-  console.log('Client connected')
-  clients.add(ws)
-
-  ws.on('message', (data: Buffer) => {
-    try {
-      const message = JSON.parse(data.toString())
-      if (message.type === 'health') {
-        ws.displayId = message.displayId
-        // Handle health update
-        console.log('Health update from', message.displayId)
-      }
-    } catch (error) {
-      console.error('Error processing message:', error)
-    }
-  })
-
-  ws.on('close', () => {
-    console.log('Client disconnected')
-    clients.delete(ws)
-  })
-
-  ws.on('error', (error) => {
-    console.error('WebSocket error:', error)
-    clients.delete(ws)
-  })
-
-  // Send initial connection acknowledgment
-  ws.send(JSON.stringify({ type: 'connected' }))
-})
-
-export function GET(req: Request) {
-  const upgrade = req.headers.get('upgrade')?.toLowerCase()
-  if (upgrade !== 'websocket') {
-    return new Response('Expected Upgrade: WebSocket', { status: 426 })
+export async function GET(request: Request) {
+  const { socket, response } = Reflect.get(request, 'socket')
+  
+  if (request.headers.get('upgrade') !== 'websocket') {
+    return new Response('Expected Websocket', { status: 426 })
   }
 
   try {
-    const { socket: connection, response } = Reflect.get(req, 'socket')
-    wss.handleUpgrade(req as any, connection, Buffer.alloc(0), (ws) => {
-      wss.emit('connection', ws)
+    const webSocket = await new Promise<WebSocket>((resolve, reject) => {
+      const wss = new WebSocket.Server({ noServer: true })
+      
+      wss.once('connection', (ws) => {
+        clients.add(ws)
+        resolve(ws)
+      })
+
+      wss.once('error', reject)
+
+      wss.handleUpgrade(request as any, socket, Buffer.alloc(0), (ws) => {
+        wss.emit('connection', ws)
+      })
     })
+
+    webSocket.on('message', (data) => {
+      try {
+        const message = JSON.parse(data.toString())
+        console.log('Received message:', message)
+
+        // Broadcast to all other clients
+        clients.forEach((client) => {
+          if (client !== webSocket && client.readyState === WebSocket.OPEN) {
+            client.send(JSON.stringify(message))
+          }
+        })
+      } catch (error) {
+        console.error('Error processing message:', error)
+      }
+    })
+
+    webSocket.on('close', () => {
+      console.log('Client disconnected')
+      clients.delete(webSocket)
+    })
+
     return response
   } catch (error) {
-    console.error('WebSocket setup error:', error)
-    return new Response('WebSocket setup failed', { status: 500 })
+    console.error('WebSocket error:', error)
+    return new Response('WebSocket error', { status: 500 })
   }
 }
 
-// Helper function to broadcast messages to all clients
-export function broadcast(message: WebSocketMessage) {
+// Helper function to broadcast to all clients
+export function broadcast(message: any) {
   clients.forEach((client) => {
-    if (client.readyState === 1) { // WebSocket.OPEN
+    if (client.readyState === WebSocket.OPEN) {
       client.send(JSON.stringify(message))
     }
   })
