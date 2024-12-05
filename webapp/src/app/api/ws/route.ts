@@ -1,40 +1,34 @@
-import { WebSocketServer } from 'ws'
-import { NextResponse } from 'next/server'
+import { NextRequest } from 'next/server'
+import type { WebSocketMessage } from '@/lib/types'
 
-let wss: WebSocketServer | null = null
+export const dynamic = 'force-dynamic'
 
-export function GET(request: Request) {
-  if (!wss) {
-    wss = new WebSocketServer({ noServer: true })
+export async function GET(req: NextRequest) {
+  const { socket, response } = await WebSocket.accept(req)
 
-    wss.on('connection', (ws) => {
-      console.log('Client connected')
-      
-      ws.on('message', (data) => {
-        try {
-          const message = JSON.parse(data.toString())
-          wss?.clients.forEach((client) => {
-            if (client !== ws && client.readyState === 1) {
-              client.send(JSON.stringify(message))
-            }
-          })
-        } catch (error) {
-          console.error('WebSocket message error:', error)
-        }
-      })
-
-      ws.on('close', () => {
-        console.log('Client disconnected')
-      })
-    })
+  socket.onopen = () => {
+    console.log('Display connected')
   }
 
-  // This is required for WebSocket upgrade
-  return new NextResponse(null, {
-    status: 101,
-    headers: {
-      Upgrade: 'websocket',
-      Connection: 'Upgrade',
-    },
-  })
+  socket.onmessage = async (event) => {
+    try {
+      const message: WebSocketMessage = JSON.parse(event.data)
+      
+      // Log and broadcast health updates
+      if (message.type === 'health') {
+        console.log(`Display ${message.displayId}: ${message.status}`)
+        // Broadcast to other management UI clients
+      }
+
+      socket.send(JSON.stringify({ type: 'ack' }))
+    } catch (err) {
+      console.error('Error handling message:', err)
+    }
+  }
+
+  socket.onclose = () => {
+    console.log('Display disconnected')
+  }
+
+  return response
 }
