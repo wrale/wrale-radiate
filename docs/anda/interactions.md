@@ -1,30 +1,32 @@
 # Actor Interactions and Data Flows
 
-## Content Upload Flow
+## Content Update Flow
 
 ### Actor Need
-Content Composer needs to deploy new video content to all displays with minimal complexity.
+Content Composer needs to deploy new content to all displays with minimal complexity.
 
 ### Key Interactions
-1. Content Composer -> Coordinator
-   - Upload new video content
-   - Receive upload confirmation
-   - Get estimated deployment time
+1. Content Composer -> Content Distribution System
+   - Upload new content
+   - Receive storage confirmation
 
-2. Display Node -> Coordinator
-   - Poll for content updates
-   - Receive new content metadata
-   - Download content if new
+2. Content Composer -> Manifest Service
+   - Create/update manifest
+   - Set timing parameters
+
+3. Display Node -> Manifest Service
+   - Poll for manifest updates
+   - Download new content if needed
 
 ### Success Criteria
-- Content Composer knows when upload is complete
+- Content Composer knows when deployment is ready
 - Content Composer can predict when content will be playing
 - Display Nodes get content reliably despite network issues
 
 ### Assumptions
-- Upload bandwidth at central location is sufficient
+- Cloud storage is reliable and accessible
 - Content size is manageable for average internet connections
-- Storage space on Display Nodes is adequate
+- Local storage on Display Nodes is adequate
 
 ## Status Monitoring Flow
 
@@ -32,15 +34,15 @@ Content Composer needs to deploy new video content to all displays with minimal 
 Content Composer needs to verify correct playback across all displays.
 
 ### Key Interactions
-1. Display Node -> Coordinator
-   - Regular heartbeat signal
-   - Current playback position
-   - Quality metrics (fps, resolution, audio status)
-   - Any error conditions
+1. Display Node -> Status Channel
+   - Maintain long-poll connection
+   - Report current manifest version
+   - Report playback position and quality
+   - Signal any error conditions
 
-2. Content Composer -> Coordinator
-   - Request system status
-   - Get aggregated display status
+2. Content Composer -> Status Channel
+   - View aggregated status
+   - Send control commands if needed
 
 ### Success Criteria
 - Content Composer can quickly identify playback issues
@@ -48,9 +50,9 @@ Content Composer needs to verify correct playback across all displays.
 - Error conditions are clearly reported
 
 ### Assumptions
-- Network latency is acceptable for status updates
-- Display Nodes can accurately measure their playback state
+- Network allows long-poll connections
 - Status data volume is manageable
+- Display Nodes can measure their state accurately
 
 ## Synchronization Flow
 
@@ -58,15 +60,13 @@ Content Composer needs to verify correct playback across all displays.
 Content Composer needs displays to be playing content in rough synchronization.
 
 ### Key Interactions
-1. Display Node -> Coordinator
-   - Get current reference time
-   - Report actual playback position
-   - Receive sync adjustments
+1. Display Node -> Manifest Service
+   - Get current manifest version
+   - Receive timing parameters
 
-2. Coordinator -> Display Node
-   - Provide reference timestamp
-   - Send playback position adjustments
-   - Define acceptable sync window
+2. Display Node -> Status Channel
+   - Report actual playback position
+   - Receive timing adjustments
 
 ### Success Criteria
 - Displays stay within few seconds of synchronization
@@ -74,24 +74,24 @@ Content Composer needs displays to be playing content in rough synchronization.
 - Resync happens automatically after interruptions
 
 ### Assumptions
-- System clocks are reasonably accurate
-- Network time sync is available
+- NTP is available
 - Brief sync variations are acceptable
+- Network latency is predictable
 
-## Error Handling Flow
+## Error Recovery Flow
 
 ### Actor Need
 Both actors need to handle and recover from common failure scenarios.
 
 ### Key Interactions
-1. Display Node -> Coordinator
+1. Display Node -> Status Channel
    - Report error conditions
-   - Request content retry
-   - Signal recovery status
+   - Signal recovery attempts
+   - Confirm resolution
 
-2. Content Composer -> Coordinator
+2. Content Composer -> Status Channel
    - View error states
-   - Initiate recovery actions
+   - Issue recovery commands
    - Verify resolution
 
 ### Success Criteria
@@ -101,25 +101,28 @@ Both actors need to handle and recover from common failure scenarios.
 
 ### Assumptions
 - Most errors are recoverable automatically
-- Manual intervention is rare
+- Fallback content is available locally
 - System can maintain partial operation during issues
 
 ## Data Volume Considerations
 
 ### Content Data
-- Primary flow: Content Composer -> Coordinator -> Display Nodes
-- Frequency: Daily
+- Primary flow: Cloud Storage -> Display Nodes
+- Frequency: As manifests update
 - Criticality: High
 - Bandwidth Impact: High
+- Caching: Local caching required
 
 ### Status Data
-- Primary flow: Display Nodes -> Coordinator -> Content Composer
-- Frequency: Regular intervals (configurable)
+- Primary flow: Display Nodes -> Status Channel
+- Frequency: Regular intervals
 - Criticality: Medium
 - Bandwidth Impact: Low
+- Caching: Not applicable
 
 ### Control Data
-- Primary flow: Bidirectional
+- Primary flow: Bidirectional through Status Channel
 - Frequency: As needed
 - Criticality: High
 - Bandwidth Impact: Minimal
+- Caching: Not applicable
