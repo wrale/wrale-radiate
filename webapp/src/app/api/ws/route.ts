@@ -37,16 +37,14 @@ export async function GET(request: NextRequest) {
       })
     })
 
-    // Handle the upgrade
-    const { socket, response } = await WebSocket.accept(request)
-    await new Promise<void>((resolve, reject) => {
-      wss.handleUpgrade(request as any, socket as any, Buffer.alloc(0), (ws) => {
-        wss.emit('connection', ws)
-        resolve()
-      })
-    })
+    // Create a raw HTTP response
+    const res = new NextResponse()
 
-    return response
+    // Add the WebSocket server to the response for middleware processing
+    ;(res as any).socket = wss
+    ;(res as any).upgrade = true
+
+    return res
   } catch (err) {
     console.error('WebSocket setup failed:', err)
     return new NextResponse('WebSocket setup failed', { status: 500 })

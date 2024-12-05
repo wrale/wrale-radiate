@@ -1,16 +1,27 @@
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
- 
+import type { WebSocketServer } from 'ws'
+
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
 
-  // Only handle WebSocket upgrade for our endpoint
   if (pathname === '/api/ws') {
-    const upgrade = request.headers.get('upgrade')
-    if (upgrade?.toLowerCase() === 'websocket') {
-      return NextResponse.next()
+    const upgradeHeader = request.headers.get('upgrade')
+    if (upgradeHeader?.toLowerCase() === 'websocket') {
+      // Get the WebSocket server instance from the response
+      const res = NextResponse.next()
+      const wss = (res as any).socket as WebSocketServer
+
+      if (wss) {
+        // Handle the upgrade here
+        wss.handleUpgrade(request as any, request.socket as any, Buffer.alloc(0), (ws) => {
+          wss.emit('connection', ws)
+        })
+      }
+
+      return res
     }
-    return NextResponse.json({ error: 'Expected WebSocket connection' }, { status: 426 })
+    return new NextResponse(null, { status: 400 })
   }
 
   return NextResponse.next()
