@@ -14,11 +14,14 @@ function getConnectionConfig() {
   // we need to connect to the webapp's port (3000)
   const serverPort = port === '3001' ? '3000' : port
   
+  // Construct the full URL including port
+  const serverUrl = `http://${hostname}:${serverPort}`
+  console.log('Constructing server URL:', serverUrl)
+  
   return {
-    url: `http://${hostname}`,
+    url: serverUrl,
     options: {
       path: '/api/socket',
-      port: parseInt(serverPort),
       transports: ['websocket'],
       forceNew: true,
       timeout: 45000,
@@ -26,11 +29,8 @@ function getConnectionConfig() {
       reconnectionDelay: 1000,
       reconnectionDelayMax: 5000,
       reconnectionAttempts: 10,
-      // Ensure the WebSocket upgrade request goes to the right port
       addTrailingSlash: false,
-      withCredentials: false,
-      autoConnect: false,
-      rejectUnauthorized: false
+      autoConnect: false
     }
   }
 }
