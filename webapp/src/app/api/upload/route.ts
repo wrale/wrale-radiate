@@ -8,6 +8,11 @@ const minioAccessKey = process.env.MINIO_ACCESS_KEY || 'minioadmin'
 const minioSecretKey = process.env.MINIO_SECRET_KEY || 'minioadmin'
 const bucketName = 'content'
 
+// Valid video extensions
+const validExtensions = new Set([
+  '.mp4', '.mov', '.avi', '.mkv', '.webm'
+])
+
 const minioClient = new Client({
   endPoint: minioEndpoint,
   port: minioPort,
@@ -31,6 +36,15 @@ async function ensureBucket() {
 }
 
 async function downloadAndStore(url: string): Promise<string> {
+  // Basic URL validation
+  const urlObj = new URL(url)
+  const pathname = urlObj.pathname.toLowerCase()
+  const hasValidExtension = Array.from(validExtensions).some(ext => pathname.endsWith(ext))
+
+  if (!hasValidExtension) {
+    throw new Error(`URL must end with a valid video extension (${Array.from(validExtensions).join(', ')})`)
+  }
+
   const response = await fetch(url)
   if (!response.ok) {
     throw new Error(`Failed to download: ${response.statusText}`)
@@ -39,10 +53,7 @@ async function downloadAndStore(url: string): Promise<string> {
   // Get content length and type if available
   const contentLength = response.headers.get('content-length')
   const contentType = response.headers.get('content-type')
-
-  if (!contentType?.startsWith('video/')) {
-    throw new Error('URL must point to a video file')
-  }
+  console.log('Content-Type:', contentType) // Debug log
 
   // Generate object name from URL
   const objectName = `${Date.now()}-${url.split('/').pop()}`
@@ -55,12 +66,16 @@ async function downloadAndStore(url: string): Promise<string> {
     throw new Error('Failed to get response reader')
   }
 
+  let totalSize = 0
   while (true) {
     const { done, value } = await reader.read()
     if (done) break
+    totalSize += value.length
     chunks.push(value)
+    console.log(`Downloaded ${totalSize} bytes`) // Progress logging
   }
 
+  console.log('Total size:', totalSize) // Debug log
   const buffer = Buffer.concat(chunks)
 
   // Upload to MinIO
