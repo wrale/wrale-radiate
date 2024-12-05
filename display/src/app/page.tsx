@@ -1,9 +1,9 @@
-import { VideoPlayer } from '../components/VideoPlayer'
+import { WSTest } from '../components/WSTest'
 
-export default function Display() {
+export default function Home() {
   return (
-    <main className="h-screen bg-black">
-      <VideoPlayer />
+    <main className="p-8">
+      <WSTest />
     </main>
   )
 }
