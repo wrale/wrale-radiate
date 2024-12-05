@@ -1,35 +1,46 @@
-import { Server } from 'ws'
+import { WebSocketServer } from 'ws'
 import { NextResponse } from 'next/server'
 
-let wsServer: Server
+let wss: WebSocketServer
 
-if (!(global as any).wsServer) {
-  (global as any).wsServer = new Server({ port: 3001 })
-  wsServer = (global as any).wsServer
+function initWebSocketServer() {
+  if (!wss) {
+    wss = new WebSocketServer({ noServer: true })
 
-  wsServer.on('connection', (socket) => {
-    console.log('Display connected')
+    wss.on('connection', (ws) => {
+      console.log('Client connected')
 
-    socket.on('message', (data) => {
-      try {
-        const message = JSON.parse(data.toString())
-        if (message.type === 'health') {
-          // Store health data or emit to monitoring
-          console.log('Health update:', message)
+      ws.on('message', (data) => {
+        try {
+          // Broadcast to all clients
+          const message = data.toString()
+          wss.clients.forEach((client) => {
+            if (client !== ws) {
+              client.send(message)
+            }
+          })
+        } catch (error) {
+          console.error('WebSocket message error:', error)
         }
-      } catch (err) {
-        console.error('Error processing message:', err)
-      }
-    })
+      })
 
-    socket.on('close', () => {
-      console.log('Display disconnected')
+      ws.on('close', () => {
+        console.log('Client disconnected')
+      })
     })
+  }
+  return wss
+}
+
+export function GET() {
+  // This route will be used for the WebSocket upgrade
+  return new NextResponse(null, {
+    status: 426,
+    headers: {
+      'Upgrade': 'websocket',
+    },
   })
-} else {
-  wsServer = (global as any).wsServer
 }
 
-export async function GET() {
-  return new NextResponse('WebSocket server running')
-}
+// Export the WebSocket server initialization for middleware
+export const wsServer = initWebSocketServer()
