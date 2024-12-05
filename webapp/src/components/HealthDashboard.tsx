@@ -13,7 +13,8 @@ export function HealthDashboard() {
 
   useEffect(() => {
     // WebSocket connection for real-time updates
-    const ws = new WebSocket(`ws://${window.location.host}`)
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+    const ws = new WebSocket(`${protocol}//${window.location.host}/api/ws`)
 
     ws.onmessage = (event) => {
       try {
