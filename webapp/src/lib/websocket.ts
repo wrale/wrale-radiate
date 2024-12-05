@@ -1,37 +1,33 @@
 import { WebSocketServer } from 'ws'
 
-declare global {
-  var wsServer: WebSocketServer
-}
+let wss: WebSocketServer | null = null
 
-export function initWebSocket(server: any) {
-  if (!global.wsServer) {
-    global.wsServer = new WebSocketServer({ server })
-    
-    global.wsServer.on('connection', (ws) => {
-      console.log('Display connected')
+export function getWebSocketServer() {
+  if (!wss) {
+    wss = new WebSocketServer({ noServer: true })
+
+    wss.on('connection', (ws) => {
+      console.log('Client connected')
 
       ws.on('message', (data) => {
         try {
-          const message = JSON.parse(data.toString())
-          if (message.type === 'status') {
-            // Broadcast status to all clients
-            global.wsServer.clients.forEach((client) => {
-              if (client !== ws) {
-                client.send(data.toString())
-              }
-            })
-          }
+          // Broadcast to all clients
+          const message = data.toString()
+          wss.clients.forEach((client) => {
+            if (client !== ws) {
+              client.send(message)
+            }
+          })
         } catch (error) {
           console.error('WebSocket message error:', error)
         }
       })
 
       ws.on('close', () => {
-        console.log('Display disconnected')
+        console.log('Client disconnected')
       })
     })
   }
   
-  return global.wsServer
+  return wss
 }
