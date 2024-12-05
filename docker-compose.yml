@@ -41,7 +41,7 @@ services:
     ports:
       - "3001:3000"
     environment:
-      - NEXT_PUBLIC_MGMT_SERVER=ws://webapp:3000
+      - NEXT_PUBLIC_MGMT_SERVER=ws://webapp:3000/api/ws
     depends_on:
       - webapp
 
