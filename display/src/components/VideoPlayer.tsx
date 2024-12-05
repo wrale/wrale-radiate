@@ -3,18 +3,30 @@
 import { useEffect, useRef, useState } from 'react'
 import { io, Socket } from 'socket.io-client'
 
-// Function to determine the correct WebSocket URL based on environment
-function getServerUrl() {
-  const env_url = process.env.NEXT_PUBLIC_SERVER_URL
-  if (!env_url) return null
+// Function to get the right connection URL based on environment
+function getConnectionConfig() {
+  if (typeof window === 'undefined') return null
 
-  // If we're in a browser (window exists) and the URL includes 'localhost',
-  // rewrite it to use the host's actual hostname
-  if (typeof window !== 'undefined' && env_url.includes('localhost')) {
-    return env_url.replace('localhost', window.location.hostname)
+  // Get the hostname and port from the current URL
+  const { hostname, port } = window.location
+  
+  // If we're running in the browser on a different port (3001),
+  // we need to connect to the webapp's port (3000)
+  const serverPort = port === '3001' ? '3000' : port
+  
+  return {
+    url: `http://${hostname}:${serverPort}`,
+    options: {
+      path: '/api/socket',
+      transports: ['websocket'],
+      forceNew: true,
+      timeout: 45000,
+      reconnection: true,
+      reconnectionDelay: 1000,
+      reconnectionDelayMax: 5000,
+      reconnectionAttempts: 10,
+    }
   }
-
-  return env_url
 }
 
 export const VideoPlayer = () => {
@@ -25,32 +37,22 @@ export const VideoPlayer = () => {
   const [retryCount, setRetryCount] = useState(0)
 
   useEffect(() => {
-    const serverUrl = getServerUrl()
-    if (!serverUrl) {
-      setError('Server URL not configured')
+    const config = getConnectionConfig()
+    if (!config) {
+      setError('Cannot determine connection configuration')
       setStatus('error')
       return
     }
 
     try {
-      console.log('Connecting to server:', serverUrl)
+      console.log('Connecting to server:', config.url, 'with options:', config.options)
 
       // Close existing connection if any
       if (socketRef.current?.connected) {
         socketRef.current.close()
       }
 
-      const socket = io(serverUrl, {
-        path: '/api/socket',
-        transports: ['websocket'], // Force WebSocket only
-        reconnection: true,
-        reconnectionDelay: 1000,
-        reconnectionDelayMax: 5000,
-        reconnectionAttempts: 10,
-        forceNew: true,
-        timeout: 45000
-      })
-
+      const socket = io(config.url, config.options)
       socketRef.current = socket
 
       socket.on('connect', () => {
