@@ -8,8 +8,11 @@ COPY display/package.json ./
 # Install dependencies and generate package-lock.json
 RUN npm install
 
+# Copy TypeScript config
+COPY display/tsconfig.json ./
+
 # Source
-COPY display .
+COPY display/src ./src
 
 # Build
 RUN npm run build
