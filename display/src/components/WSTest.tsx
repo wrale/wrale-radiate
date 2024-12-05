@@ -7,34 +7,45 @@ export function WSTest() {
   const [messages, setMessages] = useState<string[]>([])
 
   useEffect(() => {
-    // Use window.location to get the current hostname and port
-    const wsUrl = `ws://${window.location.hostname}:3000/api/ws`
+    // Get the correct server URL based on environment
+    const serverPort = process.env.NEXT_PUBLIC_SERVER_PORT || '3000'
+    const wsUrl = `ws://${window.location.hostname}:${serverPort}/api/ws`
     console.log('Connecting to WebSocket:', wsUrl)
 
-    const ws = new WebSocket(wsUrl)
+    let reconnectTimer: NodeJS.Timeout
+    const connectWebSocket = () => {
+      const ws = new WebSocket(wsUrl)
 
-    ws.onopen = () => {
-      console.log('WebSocket connected')
-      setStatus('Connected')
-      ws.send('Hello from client!')
+      ws.onopen = () => {
+        console.log('WebSocket connected')
+        setStatus('Connected')
+        ws.send('Hello from client!')
+      }
+
+      ws.onmessage = (event) => {
+        console.log('Message received:', event.data)
+        setMessages(prev => [...prev, event.data])
+      }
+
+      ws.onerror = (error) => {
+        console.error('WebSocket error:', error)
+        setStatus('Error: Connection failed')
+      }
+
+      ws.onclose = () => {
+        console.log('WebSocket closed')
+        setStatus('Disconnected - Retrying...')
+        // Try to reconnect after 2 seconds
+        reconnectTimer = setTimeout(connectWebSocket, 2000)
+      }
+
+      return ws
     }
 
-    ws.onmessage = (event) => {
-      console.log('Message received:', event.data)
-      setMessages(prev => [...prev, event.data])
-    }
-
-    ws.onerror = (error) => {
-      console.error('WebSocket error:', error)
-      setStatus('Error: ' + error.toString())
-    }
-
-    ws.onclose = () => {
-      console.log('WebSocket closed')
-      setStatus('Disconnected')
-    }
+    const ws = connectWebSocket()
 
     return () => {
+      clearTimeout(reconnectTimer)
       ws.close()
     }
   }, [])
