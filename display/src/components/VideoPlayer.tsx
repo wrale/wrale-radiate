@@ -10,19 +10,19 @@ export const VideoPlayer = () => {
   const [error, setError] = useState<string>('')
 
   useEffect(() => {
-    const serverUrl = process.env.NEXT_PUBLIC_MGMT_SERVER?.replace('ws://', 'http://')
+    const serverUrl = process.env.NEXT_PUBLIC_SERVER_URL
     if (!serverUrl) {
-      setError('Management server URL not configured')
+      setError('Server URL not configured')
       setStatus('error')
       return
     }
 
     try {
-      console.log('Connecting to Socket.IO server:', serverUrl)
+      console.log('Connecting to server:', serverUrl)
 
       const socket = io(serverUrl, {
         path: '/api/socket',
-        transports: ['websocket'],
+        transports: ['websocket', 'polling'],
         reconnection: true,
         reconnectionAttempts: Infinity,
         reconnectionDelay: 5000,
@@ -31,7 +31,7 @@ export const VideoPlayer = () => {
       socketRef.current = socket
 
       socket.on('connect', () => {
-        console.log('Socket.IO connected')
+        console.log('Socket.IO connected, ID:', socket.id)
         setStatus('ready')
         setError('')
       })
