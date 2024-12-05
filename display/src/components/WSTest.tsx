@@ -6,60 +6,94 @@ export function WSTest() {
   const [ws, setWs] = useState<WebSocket | null>(null)
   const [status, setStatus] = useState<string>('Initializing...')
   const [messages, setMessages] = useState<string[]>([])
+  const [retries, setRetries] = useState(0)
+  const maxRetries = 5
 
   const connect = useCallback(() => {
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-    const wsUrl = `${protocol}//${window.location.hostname}:3000/api/ws`
-    console.log('Connecting to:', wsUrl)
-
-    const socket = new WebSocket(wsUrl)
-
-    socket.onopen = () => {
-      console.log('Connected')
-      setStatus('Connected')
-      socket.send('Hello from display client')
+    if (retries >= maxRetries) {
+      setStatus('Max retries reached. Please refresh the page.')
+      return
     }
 
-    socket.onmessage = (event) => {
-      console.log('Message:', event.data)
-      setMessages(prev => [...prev, event.data])
-    }
+    try {
+      const baseUrl = window.location.hostname
+      const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+      const wsUrl = `${wsProtocol}//${baseUrl}:3000/ws`
 
-    socket.onerror = (error) => {
-      console.error('WebSocket error:', error)
-      setStatus('Error occurred')
-    }
+      console.log(`Connecting to WebSocket (attempt ${retries + 1}):`, wsUrl)
+      const socket = new WebSocket(wsUrl)
 
-    socket.onclose = () => {
-      console.log('Connection closed')
-      setStatus('Disconnected')
-      setWs(null)
-      // Try to reconnect after 2 seconds
-      setTimeout(connect, 2000)
-    }
+      socket.onopen = () => {
+        console.log('WebSocket connected')
+        setStatus('Connected')
+        setRetries(0)
+        socket.send(JSON.stringify({
+          type: 'message',
+          message: 'Hello from display client!'
+        }))
+      }
 
-    setWs(socket)
-  }, [])
+      socket.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data)
+          console.log('Received:', data)
+          setMessages(prev => [...prev, `${data.type}: ${data.message}`])
+        } catch (err) {
+          console.error('Error parsing message:', err)
+          setMessages(prev => [...prev, `Raw message: ${event.data}`])
+        }
+      }
+
+      socket.onerror = (error) => {
+        console.error('WebSocket error:', error)
+        setStatus('Connection error occurred')
+      }
+
+      socket.onclose = () => {
+        console.log('WebSocket closed')
+        setStatus('Disconnected - Retrying...')
+        setWs(null)
+        // Increment retry count and try again after delay
+        setRetries(prev => prev + 1)
+        setTimeout(connect, Math.min(1000 * Math.pow(2, retries), 10000))
+      }
+
+      setWs(socket)
+    } catch (error) {
+      console.error('Connection setup error:', error)
+      setStatus('Failed to setup connection')
+    }
+  }, [retries])
 
   useEffect(() => {
     connect()
-    return () => ws?.close()
-  }, [connect])
+    return () => {
+      if (ws) {
+        ws.close()
+      }
+    }
+  }, [connect, ws])
 
   const sendMessage = () => {
     if (ws?.readyState === WebSocket.OPEN) {
-      const msg = `Test message at ${new Date().toISOString()}`
-      ws.send(msg)
-      setMessages(prev => [...prev, `Sent: ${msg}`])
+      const message = {
+        type: 'message',
+        message: `Test message at ${new Date().toISOString()}`
+      }
+      ws.send(JSON.stringify(message))
+      setMessages(prev => [...prev, `Sent: ${message.message}`])
     }
   }
 
   return (
     <div className="p-4">
       <h2 className="text-xl font-bold mb-4">WebSocket Test</h2>
+      
       <div className="mb-4">
         <strong>Status:</strong> {status}
+        {retries > 0 && ` (Attempt ${retries}/${maxRetries})`}
       </div>
+      
       <div className="mb-4">
         <button
           onClick={sendMessage}
@@ -69,11 +103,12 @@ export function WSTest() {
           Send Test Message
         </button>
       </div>
+      
       <div>
         <strong>Messages:</strong>
-        <ul className="list-disc pl-4 mt-2 space-y-1">
+        <ul className="list-disc pl-4 mt-2 space-y-1 max-h-60 overflow-y-auto">
           {messages.map((msg, i) => (
-            <li key={i}>{msg}</li>
+            <li key={i} className="text-sm">{msg}</li>
           ))}
         </ul>
       </div>
