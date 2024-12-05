@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { Client } from 'minio'
 import type { WebSocketMessage } from '@/lib/types'
+import { Readable } from 'stream'
 
 const minioEndpoint = process.env.MINIO_ENDPOINT || 'localhost'
 const minioPort = parseInt(process.env.MINIO_PORT || '9000')
@@ -36,17 +37,32 @@ async function downloadAndStore(url: string): Promise<string> {
     throw new Error(`Failed to download: ${response.statusText}`)
   }
 
+  // Get content length and type if available
+  const contentLength = response.headers.get('content-length')
+  const contentType = response.headers.get('content-type')
+
+  if (!contentType?.startsWith('video/')) {
+    throw new Error('URL must point to a video file')
+  }
+
   // Generate object name from URL
   const objectName = `${Date.now()}-${url.split('/').pop()}`
-  
-  // Get response as Buffer for MinIO
-  const buffer = Buffer.from(await response.arrayBuffer())
-  
-  // Upload to MinIO
+
+  // Get the response body as a ReadableStream
+  const bodyStream = response.body
+  if (!bodyStream) {
+    throw new Error('Failed to get response stream')
+  }
+
+  // Convert ReadableStream to Node.js Readable stream
+  const readable = Readable.fromWeb(bodyStream)
+
+  // Upload to MinIO using streams
   await minioClient.putObject(
     bucketName,
     objectName,
-    buffer
+    readable,
+    parseInt(contentLength || '0')  // Pass content length if known
   )
 
   // Get temporary URL for the object
