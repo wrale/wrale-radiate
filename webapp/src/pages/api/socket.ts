@@ -5,7 +5,8 @@ import type { Socket } from 'socket.io'
 
 export const config = {
   api: {
-    bodyParser: false
+    bodyParser: false,
+    externalResolver: true
   }
 }
 
@@ -18,6 +19,11 @@ type NextApiResponseServerIO = NextApiResponse & {
 }
 
 const ioHandler = (req: NextApiRequest, res: NextApiResponseServerIO) => {
+  if (req.method === 'OPTIONS') {
+    res.status(200).end()
+    return
+  }
+
   if (!res.socket.server.io) {
     console.log('Initializing Socket.IO...')
     const io = new SocketIOServer(res.socket.server, {
@@ -25,9 +31,13 @@ const ioHandler = (req: NextApiRequest, res: NextApiResponseServerIO) => {
       addTrailingSlash: false,
       cors: {
         origin: '*',
-        methods: ['GET', 'POST']
+        methods: ['GET', 'POST'],
+        allowedHeaders: ['*'],
+        credentials: true
       },
-      transports: ['polling', 'websocket']
+      transports: ['polling', 'websocket'],
+      connectTimeout: 45000,
+      pingTimeout: 30000
     })
 
     io.on('connection', (socket: Socket) => {
@@ -42,6 +52,14 @@ const ioHandler = (req: NextApiRequest, res: NextApiResponseServerIO) => {
       socket.on('disconnect', (reason) => {
         console.log('Client disconnected:', socket.id, reason)
       })
+
+      socket.on('error', (error) => {
+        console.error('Socket error:', error)
+      })
+    })
+
+    io.engine.on('connection_error', (err) => {
+      console.error('Connection error:', err)
     })
 
     res.socket.server.io = io
