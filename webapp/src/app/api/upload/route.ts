@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server'
 import { Client } from 'minio'
 import type { WebSocketMessage } from '@/lib/types'
-import { Readable } from 'stream'
 
 const minioEndpoint = process.env.MINIO_ENDPOINT || 'localhost'
 const minioPort = parseInt(process.env.MINIO_PORT || '9000')
@@ -48,21 +47,28 @@ async function downloadAndStore(url: string): Promise<string> {
   // Generate object name from URL
   const objectName = `${Date.now()}-${url.split('/').pop()}`
 
-  // Get the response body as a ReadableStream
-  const bodyStream = response.body
-  if (!bodyStream) {
-    throw new Error('Failed to get response stream')
+  // Read the response as an array buffer
+  const chunks: Uint8Array[] = []
+  const reader = response.body?.getReader()
+  
+  if (!reader) {
+    throw new Error('Failed to get response reader')
   }
 
-  // Convert Web ReadableStream to Node.js Readable stream
-  const readable = Readable.fromWeb(bodyStream)
+  while (true) {
+    const { done, value } = await reader.read()
+    if (done) break
+    chunks.push(value)
+  }
 
-  // Upload to MinIO using streams
+  const buffer = Buffer.concat(chunks)
+
+  // Upload to MinIO
   await minioClient.putObject(
     bucketName,
     objectName,
-    readable,
-    parseInt(contentLength || '0')  // Pass content length if known
+    buffer,
+    buffer.length
   )
 
   // Get temporary URL for the object
