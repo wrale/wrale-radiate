@@ -3,9 +3,13 @@ import { Client } from 'minio'
 import type { WebSocketServer } from 'ws'
 import type { CustomWebSocket, WebSocketMessage } from '@/lib/types'
 
+// MinIO endpoint needs protocol and hostname validation
+const minioEndpoint = process.env.MINIO_ENDPOINT || 'localhost'
+const minioPort = parseInt(process.env.MINIO_PORT || '9000')
+
 const minioClient = new Client({
-  endPoint: process.env.MINIO_ENDPOINT || 'localhost',
-  port: 9000,
+  endPoint: minioEndpoint,
+  port: minioPort,
   useSSL: false,
   accessKey: process.env.MINIO_ACCESS_KEY || 'minioadmin',
   secretKey: process.env.MINIO_SECRET_KEY || 'minioadmin',
@@ -13,7 +17,7 @@ const minioClient = new Client({
 
 const BUCKET_NAME = 'content'
 
-async function downloadVideo(url: string): Promise<Buffer> {
+async function downloadVideo(url: string): Promise<{ buffer: Buffer; contentType: string }> {
   const response = await fetch(url)
   if (!response.ok) {
     throw new Error(`Failed to download video: ${response.statusText}`)
@@ -21,10 +25,21 @@ async function downloadVideo(url: string): Promise<Buffer> {
   
   const contentType = response.headers.get('content-type')
   if (!contentType?.startsWith('video/')) {
-    throw new Error('URL does not point to a video file')
+    // Try to determine content type from URL if header isn't available
+    const urlLower = url.toLowerCase()
+    if (urlLower.endsWith('.mp4')) {
+      return {
+        buffer: Buffer.from(await response.arrayBuffer()),
+        contentType: 'video/mp4'
+      }
+    }
+    throw new Error('URL does not appear to be a video file')
   }
 
-  return Buffer.from(await response.arrayBuffer())
+  return {
+    buffer: Buffer.from(await response.arrayBuffer()),
+    contentType
+  }
 }
 
 export async function POST(request: Request) {
@@ -48,9 +63,17 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: 'No URL provided' }, { status: 400 })
       }
 
-      buffer = await downloadVideo(url)
-      fileName = url.split('/').pop() || 'video.mp4'
-      contentType = 'video/mp4' // Default to MP4 for URL uploads
+      try {
+        const downloadResult = await downloadVideo(url)
+        buffer = downloadResult.buffer
+        contentType = downloadResult.contentType
+        fileName = url.split('/').pop() || 'video.mp4'
+      } catch (error) {
+        return NextResponse.json(
+          { error: error instanceof Error ? error.message : 'Failed to download video' },
+          { status: 400 }
+        )
+      }
     } else {
       // Handle file upload
       const formData = await request.formData()
