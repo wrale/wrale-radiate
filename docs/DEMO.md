@@ -33,16 +33,26 @@ The demo showcases four core capabilities:
 ## Demo Walkthrough
 
 ### 1. Content Management (MKTG_CONTENT_MGMT)
-- Open the management interface (http://localhost:3000)
-- Use the upload form in "Content Management" section
-- For testing, you can use this sample H.264 video:
-  ```
-  https://file-examples.com/wp-content/storage/2017/04/file_example_MP4_1920_18MG.mp4
-  ```
-  Right-click and save this file locally before uploading.
-- Upload the saved video file
-- Watch for upload confirmation
-- Content is stored in MinIO (viewable in MinIO console)
+
+The management interface (http://localhost:3000) provides two ways to add content:
+
+#### Option A: Direct URL
+1. Click "Use URL" in the content management section
+2. Paste this sample video URL:
+   ```
+   https://file-examples.com/wp-content/storage/2017/04/file_example_MP4_1920_18MG.mp4
+   ```
+3. Click "Process URL"
+4. Watch for the upload confirmation
+
+#### Option B: File Upload
+1. Click "Upload File" in the content management section
+2. Either:
+   - Download the sample video above and upload it, or
+   - Use any H.264-encoded MP4 file
+3. Select the file and watch for upload confirmation
+
+Both methods will store the content in MinIO (viewable in MinIO console)
 
 ### 2. Content Transport (CAP_CONTENT_TRANSPORT)
 - System automatically:
@@ -68,7 +78,7 @@ The demo showcases four core capabilities:
 
 1. Open multiple display simulator tabs (http://localhost:3001)
 2. Each tab simulates a separate display
-3. Upload content to see synchronized delivery
+3. Upload content (via URL or file) to see synchronized delivery
 4. Watch health dashboard track all displays
 
 ## Key Development Commands
@@ -100,12 +110,23 @@ make clean
 - Verify MinIO console access: http://localhost:9001
 
 ### Common Issues
+
 1. Upload failures
-   - Check MinIO connectivity
-   - Verify file is H.264 encoded
-   - Check webapp logs
+   - Direct URL:
+     - Check if URL is accessible
+     - Verify it's a direct link to an MP4 file
+     - Check webapp logs for download errors
+   - File Upload:
+     - Verify file is H.264 encoded
+     - Check file size (should be under 100MB for demo)
+     - Check MinIO connectivity
 
 2. Display connection issues
    - Verify WebSocket connection in browser console
    - Check display client logs
    - Restart display client if needed
+
+3. Playback issues
+   - Verify video codec is H.264
+   - Check browser console for player errors
+   - Verify content URL is accessible
