@@ -1,28 +1,35 @@
-import { WebSocketServer } from '@/lib/websocket'
+import { headers } from 'next/headers'
 
-// Use Edge Runtime
-export const runtime = 'edge'
+export const runtime = 'nodejs'
 
 export async function GET(request: Request) {
+  const headersList = headers()
+  const upgrade = headersList.get('upgrade')
+
+  if (!upgrade || upgrade.toLowerCase() !== 'websocket') {
+    return new Response('Expected Websocket', { status: 426 })
+  }
+
   try {
-    if (!process.env.NEXT_EDGE_WEB_SOCKET) {
-      return new Response('WebSocket not enabled', { status: 500 })
+    const webSocketUrl = new URL(request.url)
+    const clientId = webSocketUrl.searchParams.get('clientId') || 'unknown'
+
+    // Create a Response that indicates this should upgrade to WebSocket
+    const responseHeaders = {
+      'Upgrade': 'websocket',
+      'Connection': 'Upgrade',
+      'Sec-WebSocket-Accept': headersList.get('sec-websocket-key') || '',
+      'Sec-WebSocket-Protocol': headersList.get('sec-websocket-protocol') || ''
     }
 
-    if (!request.headers.get('upgrade')?.includes('websocket')) {
-      return new Response('Expected WebSocket upgrade', { status: 426 })
-    }
+    console.log(`WebSocket connection attempt from ${clientId}`)
 
-    const { socket, response } = Reflect.get(request, 'socket')
-
-    // Get the singleton WebSocket server
-    const wss = WebSocketServer.getInstance()
-
-    await wss.handleUpgrade(request, socket)
-
-    return response
-  } catch (error) {
-    console.error('WebSocket setup error:', error)
+    return new Response(null, {
+      status: 101,
+      headers: responseHeaders
+    })
+  } catch (err) {
+    console.error('WebSocket setup error:', err)
     return new Response('WebSocket setup failed', { status: 500 })
   }
 }
