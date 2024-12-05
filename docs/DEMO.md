@@ -35,7 +35,12 @@ The demo showcases four core capabilities:
 ### 1. Content Management (MKTG_CONTENT_MGMT)
 - Open the management interface (http://localhost:3000)
 - Use the upload form in "Content Management" section
-- Select an H.264 video file
+- For testing, you can use this sample H.264 video:
+  ```
+  https://file-examples.com/wp-content/storage/2017/04/file_example_MP4_1920_18MG.mp4
+  ```
+  Right-click and save this file locally before uploading.
+- Upload the saved video file
 - Watch for upload confirmation
 - Content is stored in MinIO (viewable in MinIO console)
 
