@@ -15,7 +15,11 @@ export const VideoPlayer = () => {
     const clientId = `display-${Math.random().toString(36).substring(7)}`
 
     const connectWebSocket = () => {
-      const wsBaseUrl = process.env.NEXT_PUBLIC_MGMT_SERVER
+      // Use browser-specific URL when running in browser
+      const wsBaseUrl = typeof window !== 'undefined' 
+        ? process.env.NEXT_PUBLIC_BROWSER_MGMT_SERVER 
+        : process.env.NEXT_PUBLIC_MGMT_SERVER
+
       if (!wsBaseUrl) {
         setError('Management server URL not configured')
         setStatus('error')
@@ -23,15 +27,13 @@ export const VideoPlayer = () => {
       }
 
       try {
-        // Update URL to use page route instead of app route
-        const wsUrl = wsBaseUrl.replace('/api/ws', '/api/ws')
-        console.log('Attempting to connect to:', wsUrl)
+        console.log('Attempting to connect to:', wsBaseUrl)
 
         if (wsRef.current) {
           wsRef.current.close()
         }
 
-        const ws = new WebSocket(wsUrl)
+        const ws = new WebSocket(wsBaseUrl)
         wsRef.current = ws
 
         ws.onopen = () => {
