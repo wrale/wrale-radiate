@@ -2,9 +2,11 @@ FROM node:18-alpine
 
 WORKDIR /app
 
-# Dependencies
-COPY display/package.json display/package-lock.json ./
-RUN npm ci
+# Copy package.json first
+COPY display/package.json ./
+
+# Install dependencies and generate package-lock.json
+RUN npm install
 
 # Source
 COPY display .
