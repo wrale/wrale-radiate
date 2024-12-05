@@ -2,34 +2,54 @@ import { NextRequest } from 'next/server'
 
 export const dynamic = 'force-dynamic'
 
-if (!process.env.EDGE_RUNTIME) {
-  throw new Error('This route requires edge runtime')
+type DisplayStatus = {
+  id: string
+  healthy: boolean
+  lastUpdate: string
+  playbackStatus?: string
+}
+
+type Message = {
+  type: 'status' | 'heartbeat'
+  data: DisplayStatus
 }
 
 export async function GET(req: NextRequest) {
   const { socket, response } = await WebSocket.accept(req)
 
   socket.onopen = () => {
-    console.log('WebSocket connection opened')
+    console.log('Display connected')
+    socket.send(JSON.stringify({ type: 'welcome' }))
   }
 
   socket.onmessage = async (event) => {
     try {
-      const data = JSON.parse(event.data)
-      console.log('Received message:', data)
+      const message: Message = JSON.parse(event.data)
       
-      // Echo back for now
-      socket.send(JSON.stringify({ 
-        type: 'ACK',
-        data: data 
-      }))
+      switch (message.type) {
+        case 'status':
+          // Store status update
+          console.log('Status update:', message.data)
+          socket.send(JSON.stringify({ 
+            type: 'ack',
+            data: { received: message.data.lastUpdate }
+          }))
+          break
+
+        case 'heartbeat':
+          socket.send(JSON.stringify({ type: 'heartbeat' }))
+          break
+
+        default:
+          console.warn('Unknown message type:', message)
+      }
     } catch (err) {
       console.error('Error handling message:', err)
     }
   }
 
   socket.onclose = () => {
-    console.log('WebSocket connection closed')
+    console.log('Display disconnected')
   }
 
   return response
