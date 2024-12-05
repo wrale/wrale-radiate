@@ -41,8 +41,7 @@ services:
     ports:
       - "3001:3000"
     environment:
-      - NEXT_PUBLIC_MGMT_SERVER=ws://webapp:3000/api/ws # For internal container comms
-      - NEXT_PUBLIC_BROWSER_MGMT_SERVER=ws://localhost:3000/api/ws # For browser access
+      - NEXT_PUBLIC_SERVER_URL=http://localhost:3000
     depends_on:
       - webapp
 
