@@ -1,90 +1,106 @@
 # Wrale Radiate Demo Guide
 
-## Quick Start Demo
+This guide walks through demonstrating the steel thread implementation of Wrale Radiate.
 
-1. Start the System:
+## Steel Thread Components
+
+The demo showcases four core capabilities:
+1. Content Management (MKTG_CONTENT_MGMT)
+2. Content Transport (CAP_CONTENT_TRANSPORT)
+3. Basic Rendering (CAP_BASIC_RENDER)
+4. Health Monitoring (CAP_DISPLAY_HEALTH)
+
+## Quick Start
+
+1. Start the system:
    ```bash
-   make cycle   # Clean, pull latest, and start all services
+   # First time setup
+   make init
+   make up
+   
+   # Or use the all-in-one command
+   make cycle    # Clean, pull latest, initialize, and start
    ```
 
-2. Open the Interfaces:
+2. Open the interfaces:
    ```bash
-   make open    # Opens both management and display interfaces
+   make open
    ```
    - Management Interface: http://localhost:3000
    - Display Simulator: http://localhost:3001
+   - MinIO Console: http://localhost:9001 (minioadmin/minioadmin)
 
-## Demo Flow
+## Demo Walkthrough
 
-### 1. Content Upload
-1. Open the management interface (http://localhost:3000)
-2. Under "Content Management", click the file upload button
-3. Select a video file (supported formats: MP4/H.264)
-4. Watch for the successful upload confirmation
+### 1. Content Management (MKTG_CONTENT_MGMT)
+- Open the management interface (http://localhost:3000)
+- Use the upload form in "Content Management" section
+- Select an H.264 video file
+- Watch for upload confirmation
+- Content is stored in MinIO (viewable in MinIO console)
 
-### 2. Display Simulation
-1. Open the display simulator (http://localhost:3001)
-2. The simulator will automatically:
-   - Connect to the management interface
-   - Report its status (visible in the Health Dashboard)
-   - Play any content that gets uploaded
+### 2. Content Transport (CAP_CONTENT_TRANSPORT)
+- System automatically:
+  - Generates temporary URL for the content
+  - Broadcasts URL via WebSocket
+  - Manages delivery to connected displays
+- View transport activity in `make webapp-logs`
 
-### 3. Real-time Updates
-1. The Health Dashboard on the management interface shows:
-   - Connected display status
-   - Real-time connection state
-   - Last update timestamps
+### 3. Basic Rendering (CAP_BASIC_RENDER)
+- Open the display simulator (http://localhost:3001)
+- Observe automatic video playback when content arrives
+- Video plays using H.264 codec
+- Status reporting happens in background
 
-### 4. Content Distribution Flow
-When you upload a video:
-1. File is stored in MinIO object storage
-2. Management interface generates a temporary URL
-3. URL is broadcast via WebSocket to all connected displays
-4. Display client receives URL and begins playback
+### 4. Health Monitoring (CAP_DISPLAY_HEALTH)
+- Watch the Health Dashboard in management interface
+- Shows:
+  - Display connection status
+  - Real-time status updates
+  - Last update timestamps
 
-## Troubleshooting
+## Testing Multiple Displays
 
-### Common Issues
+1. Open multiple display simulator tabs (http://localhost:3001)
+2. Each tab simulates a separate display
+3. Upload content to see synchronized delivery
+4. Watch health dashboard track all displays
 
-1. **Display Not Connected**
-   - Ensure both services are running (`make ps`)
-   - Check display logs: `make display-logs`
-   - Verify WebSocket connection in browser console
-
-2. **Upload Failures**
-   - Check webapp logs: `make webapp-logs`
-   - Verify MinIO is running: http://localhost:9001
-   - Check file format (must be MP4/H.264)
-
-3. **Playback Issues**
-   - Check browser console for errors
-   - Verify video codec compatibility
-   - Check display client logs: `make display-logs`
-
-### Useful Commands
+## Key Development Commands
 
 ```bash
-# View all logs
+# View all service logs
 make logs
 
-# View specific service logs
+# View specific logs
 make webapp-logs
 make display-logs
 
-# Access service shells
+# Container shells
 make shell-webapp
 make shell-display
 
-# Restart services
-make restart
+# Stop services
+make down
 
-# Full rebuild
-make rebuild
+# Full cleanup
+make clean
 ```
 
-## Next Steps
+## Troubleshooting
 
-- Try uploading different video formats
-- Connect multiple browser tabs to the display simulator
-- Monitor real-time status updates
-- Experiment with connection/disconnection behavior
+### System Health
+- Check service status: `make ps`
+- View specific logs: `make webapp-logs` or `make display-logs`
+- Verify MinIO console access: http://localhost:9001
+
+### Common Issues
+1. Upload failures
+   - Check MinIO connectivity
+   - Verify file is H.264 encoded
+   - Check webapp logs
+
+2. Display connection issues
+   - Verify WebSocket connection in browser console
+   - Check display client logs
+   - Restart display client if needed
