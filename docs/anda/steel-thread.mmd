@@ -1,0 +1,51 @@
+graph TB
+    %% Actors
+    subgraph Actors
+        MKTG[Corporate Marketing]
+        DISPLAY[Basic Display]
+        IT[IT Ops]
+    end
+
+    %% Needs
+    subgraph Needs
+        N1[Content Management<br/>MKTG_CONTENT_MGMT]
+        N2[Basic Rendering<br/>DISP_BASIC_RENDER]
+        N3[Display Health<br/>DISP_BASIC_HEALTH]
+        N4[Basic Monitoring<br/>IT_HEALTH_BASIC]
+    end
+
+    %% Capabilities
+    subgraph Capabilities
+        C1[Asset Library<br/>CAP_ASSET_LIB]
+        C2[Content Transport<br/>CAP_CONTENT_TRANSPORT]
+        C3[Basic Renderer<br/>CAP_BASIC_RENDER]
+        C4[Health Monitor<br/>CAP_DISPLAY_HEALTH]
+    end
+
+    %% Actor to Need relationships
+    MKTG --> N1
+    DISPLAY --> N2
+    DISPLAY --> N3
+    IT --> N4
+
+    %% Need to Capability relationships
+    N1 --> C1
+    N1 --> C2
+    N2 --> C3
+    N3 --> C4
+    N4 --> C4
+
+    %% Flow direction
+    C1 -..->|content| C2
+    C2 -..->|content| C3
+    C3 -..->|status| C4
+
+    %% Style definitions
+    classDef actor fill:#f9f,stroke:#333,stroke-width:2px
+    classDef need fill:#ff9,stroke:#333,stroke-width:2px
+    classDef capability fill:#9ff,stroke:#333,stroke-width:2px
+
+    %% Apply styles
+    class MKTG,DISPLAY,IT actor
+    class N1,N2,N3,N4 need
+    class C1,C2,C3,C4 capability
