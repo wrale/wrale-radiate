@@ -1,118 +1,88 @@
 "use client"
 
 import { useEffect, useRef, useState } from 'react'
-
-const RETRY_INTERVAL = 5000 // 5 seconds between retries
+import { io, Socket } from 'socket.io-client'
 
 export const VideoPlayer = () => {
   const videoRef = useRef<HTMLVideoElement>(null)
-  const wsRef = useRef<WebSocket | null>(null)
+  const socketRef = useRef<Socket | null>(null)
   const [status, setStatus] = useState<'connecting' | 'ready' | 'playing' | 'error'>('connecting')
   const [error, setError] = useState<string>('')
 
   useEffect(() => {
-    let retryTimeout: NodeJS.Timeout
-    const clientId = `display-${Math.random().toString(36).substring(7)}`
-
-    const connectWebSocket = () => {
-      // Use browser-specific URL when running in browser
-      const wsBaseUrl = typeof window !== 'undefined' 
-        ? process.env.NEXT_PUBLIC_BROWSER_MGMT_SERVER 
-        : process.env.NEXT_PUBLIC_MGMT_SERVER
-
-      if (!wsBaseUrl) {
-        setError('Management server URL not configured')
-        setStatus('error')
-        return
-      }
-
-      try {
-        console.log('Attempting to connect to:', wsBaseUrl)
-
-        if (wsRef.current) {
-          wsRef.current.close()
-        }
-
-        const ws = new WebSocket(wsBaseUrl)
-        wsRef.current = ws
-
-        ws.onopen = () => {
-          console.log('WebSocket connected')
-          setStatus('ready')
-          setError('')
-          // Send initial health report
-          ws.send(JSON.stringify({
-            type: 'health',
-            status: 'ready',
-            displayId: clientId
-          }))
-        }
-
-        ws.onmessage = (event) => {
-          try {
-            const msg = JSON.parse(event.data)
-            console.log('Received message:', msg)
-            if (msg.type === 'play' && videoRef.current) {
-              videoRef.current.src = msg.url
-              videoRef.current.play()
-              setStatus('playing')
-            } else if (msg.type === 'connected') {
-              console.log('Connection acknowledged')
-            }
-          } catch (err) {
-            console.error('Error processing message:', err)
-          }
-        }
-
-        ws.onerror = (event) => {
-          console.error('WebSocket error:', event)
-          setError('Connection error')
-          setStatus('error')
-        }
-
-        ws.onclose = () => {
-          console.log('WebSocket closed, scheduling retry...')
-          setStatus('connecting')
-          wsRef.current = null
-          // Schedule retry
-          retryTimeout = setTimeout(connectWebSocket, RETRY_INTERVAL)
-        }
-
-        // Start health reporting interval
-        const healthInterval = setInterval(() => {
-          if (ws && ws.readyState === WebSocket.OPEN) {
-            ws.send(JSON.stringify({
-              type: 'health',
-              status,
-              displayId: clientId,
-              currentTime: videoRef.current?.currentTime,
-              duration: videoRef.current?.duration
-            }))
-          }
-        }, 5000)
-
-        return () => {
-          clearInterval(healthInterval)
-          if (ws && ws.readyState === WebSocket.OPEN) {
-            ws.close()
-          }
-        }
-      } catch (err) {
-        console.error('Error setting up WebSocket:', err)
-        setError('Failed to connect')
-        setStatus('error')
-        // Schedule retry
-        retryTimeout = setTimeout(connectWebSocket, RETRY_INTERVAL)
-      }
+    const serverUrl = process.env.NEXT_PUBLIC_MGMT_SERVER?.replace('ws://', 'http://')
+    if (!serverUrl) {
+      setError('Management server URL not configured')
+      setStatus('error')
+      return
     }
 
-    connectWebSocket()
+    try {
+      console.log('Connecting to Socket.IO server:', serverUrl)
 
-    return () => {
-      if (wsRef.current) {
-        wsRef.current.close()
+      const socket = io(serverUrl, {
+        path: '/api/socket',
+        transports: ['websocket'],
+        reconnection: true,
+        reconnectionAttempts: Infinity,
+        reconnectionDelay: 5000,
+      })
+
+      socketRef.current = socket
+
+      socket.on('connect', () => {
+        console.log('Socket.IO connected')
+        setStatus('ready')
+        setError('')
+      })
+
+      socket.on('message', (msg) => {
+        try {
+          console.log('Received message:', msg)
+          if (msg.type === 'play' && videoRef.current) {
+            videoRef.current.src = msg.url
+            videoRef.current.play()
+            setStatus('playing')
+          }
+        } catch (err) {
+          console.error('Error processing message:', err)
+        }
+      })
+
+      socket.on('connected', (data) => {
+        console.log('Connection acknowledged:', data)
+      })
+
+      socket.on('connect_error', (err) => {
+        console.error('Socket.IO connection error:', err)
+        setError(`Connection error: ${err.message}`)
+        setStatus('error')
+      })
+
+      socket.on('disconnect', (reason) => {
+        console.log('Socket.IO disconnected:', reason)
+        setStatus('connecting')
+      })
+
+      // Start health reporting interval
+      const healthInterval = setInterval(() => {
+        if (socket.connected) {
+          socket.emit('health', {
+            status,
+            currentTime: videoRef.current?.currentTime,
+            duration: videoRef.current?.duration
+          })
+        }
+      }, 5000)
+
+      return () => {
+        clearInterval(healthInterval)
+        socket.disconnect()
       }
-      clearTimeout(retryTimeout)
+    } catch (err) {
+      console.error('Error setting up Socket.IO:', err)
+      setError('Failed to connect')
+      setStatus('error')
     }
   }, [])
 
