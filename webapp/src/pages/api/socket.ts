@@ -19,22 +19,12 @@ type NextApiResponseServerIO = NextApiResponse & {
 }
 
 const ioHandler = (req: NextApiRequest, res: NextApiResponseServerIO) => {
-  if (req.method === 'OPTIONS') {
-    res.status(200).end()
-    return
-  }
-
   if (!res.socket.server.io) {
     console.log('Initializing Socket.IO...')
     const io = new SocketIOServer(res.socket.server, {
       path: '/api/socket',
       addTrailingSlash: false,
-      cors: {
-        origin: '*',
-        methods: ['GET', 'POST'],
-        allowedHeaders: ['*'],
-        credentials: true
-      },
+      cors: false, // Let middleware handle CORS
       transports: ['polling', 'websocket'],
       connectTimeout: 45000,
       pingTimeout: 30000
