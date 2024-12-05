@@ -1,4 +1,5 @@
 import { WebSocketServer } from 'ws'
+import type { CustomWebSocket, WebSocketMessage } from './types'
 
 let wss: WebSocketServer | null = null
 
@@ -6,16 +7,16 @@ export function getWebSocketServer() {
   if (!wss) {
     wss = new WebSocketServer({ noServer: true })
 
-    wss.on('connection', (ws) => {
+    wss.on('connection', (ws: CustomWebSocket) => {
       console.log('Client connected')
 
-      ws.on('message', (data) => {
+      ws.on('message', (data: Buffer) => {
         try {
+          const message: WebSocketMessage = JSON.parse(data.toString())
           // Broadcast to all clients
-          const message = data.toString()
-          wss.clients.forEach((client) => {
+          wss?.clients.forEach((client: CustomWebSocket) => {
             if (client !== ws) {
-              client.send(message)
+              client.send(JSON.stringify(message))
             }
           })
         } catch (error) {
