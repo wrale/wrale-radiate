@@ -17,6 +17,7 @@ services:
       - MINIO_PORT=9000
       - MINIO_ACCESS_KEY=minioadmin
       - MINIO_SECRET_KEY=minioadmin
+      - WS_ALLOWED_ORIGINS=http://localhost:3001
     networks:
       - wrale-net
     depends_on:
@@ -45,8 +46,7 @@ services:
     ports:
       - "3001:3000"
     environment:
-      # This will be replaced with actual hostname in browser
-      - NEXT_PUBLIC_SERVER_URL=http://localhost:3000
+      - NEXT_PUBLIC_SERVER_PORT=3000
     networks:
       - wrale-net
     depends_on:
