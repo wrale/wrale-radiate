@@ -17,60 +17,36 @@ type NextApiResponseServerIO = NextApiResponse & {
   }
 }
 
-const allowedOrigins = [
-  'http://localhost:3000',
-  'http://localhost:3001',
-  'http://127.0.0.1:3000',
-  'http://127.0.0.1:3001'
-]
-
 const ioHandler = (req: NextApiRequest, res: NextApiResponseServerIO) => {
-  // Set CORS headers
-  const origin = req.headers.origin
-  if (origin && allowedOrigins.includes(origin)) {
-    res.setHeader('Access-Control-Allow-Origin', origin)
-    res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,POST')
-    res.setHeader('Access-Control-Allow-Headers', '*')
-    res.setHeader('Access-Control-Allow-Credentials', 'true')
-  }
-
-  // Handle preflight requests
-  if (req.method === 'OPTIONS') {
-    res.status(200).end()
-    return
-  }
-
   if (!res.socket.server.io) {
     console.log('Initializing Socket.IO...')
     const io = new SocketIOServer(res.socket.server, {
       path: '/api/socket',
       addTrailingSlash: false,
+      transports: ['websocket'],
       cors: {
-        origin: allowedOrigins,
+        origin: '*',
         methods: ['GET', 'POST'],
-        credentials: true,
-        allowedHeaders: ['*']
+        credentials: false,
       },
-      connectTimeout: 45000,
-      pingTimeout: 30000,
-      transports: ['polling', 'websocket']
     })
 
     io.on('connection', (socket: Socket) => {
-      console.log('Client connected:', socket.id)
+      const clientId = socket.id
+      console.log('Client connected:', clientId)
 
       socket.on('health', (data) => {
-        console.log('Health update from', socket.id, ':', data)
+        console.log('Health update from', clientId, ':', data)
       })
 
-      socket.emit('connected', { id: socket.id })
+      socket.emit('connected', { id: clientId })
 
       socket.on('disconnect', (reason) => {
-        console.log('Client disconnected:', socket.id, reason)
+        console.log('Client disconnected:', clientId, reason)
       })
 
       socket.on('error', (error) => {
-        console.error('Socket error:', error)
+        console.error('Socket error from', clientId, ':', error)
       })
     })
 
@@ -82,6 +58,7 @@ const ioHandler = (req: NextApiRequest, res: NextApiResponseServerIO) => {
   } else {
     console.log('Socket.IO already running')
   }
+
   res.end()
 }
 
