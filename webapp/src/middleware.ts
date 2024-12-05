@@ -2,7 +2,15 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
 export function middleware(request: NextRequest) {
-  // Add CORS headers for WebSocket upgrade requests
+  // Handle WebSocket upgrade
+  if (request.headers.get('upgrade')?.toLowerCase() === 'websocket') {
+    const response = NextResponse.next();
+    response.headers.set('Upgrade', 'websocket');
+    response.headers.set('Connection', 'Upgrade');
+    return response;
+  }
+
+  // Handle CORS preflight
   if (request.method === 'OPTIONS') {
     return new NextResponse(null, {
       status: 200,
@@ -12,11 +20,6 @@ export function middleware(request: NextRequest) {
         'Access-Control-Allow-Origin': '*',
       },
     });
-  }
-
-  // Handle WebSocket upgrade
-  if (request.headers.get('upgrade') === 'websocket') {
-    return NextResponse.next();
   }
 
   return NextResponse.next();
