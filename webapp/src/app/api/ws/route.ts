@@ -1,5 +1,6 @@
 import { headers } from 'next/headers'
 import { NextRequest, NextResponse } from 'next/server'
+import type { CustomWebSocket, CustomWebSocketServer, WebSocketMessage } from '@/lib/types'
 
 export const dynamic = 'force-dynamic'
 
@@ -13,16 +14,16 @@ export async function GET(req: NextRequest) {
 
   try {
     // @ts-ignore - Next.js provides these in Edge Runtime
-    const webSocketServer = new WebSocketServer({
+    const webSocketServer: CustomWebSocketServer = new WebSocketServer({
       noServer: true
     })
 
-    webSocketServer.on('connection', (ws) => {
+    webSocketServer.on('connection', (ws: CustomWebSocket) => {
       console.log('Display connected')
 
-      ws.on('message', (data) => {
+      ws.on('message', (data: Buffer) => {
         try {
-          const message = JSON.parse(data.toString())
+          const message = JSON.parse(data.toString()) as WebSocketMessage
           console.log('Message received:', message)
           
           if (message.type === 'health') {
