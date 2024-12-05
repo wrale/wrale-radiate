@@ -1,11 +1,12 @@
 import { NextResponse } from 'next/server'
 import { Client } from 'minio'
-import type { CustomWebSocket, WebSocketMessage } from '@/lib/types'
+import type { WebSocketMessage } from '@/lib/types'
 
 const minioEndpoint = process.env.MINIO_ENDPOINT || 'localhost'
 const minioPort = parseInt(process.env.MINIO_PORT || '9000')
 const minioAccessKey = process.env.MINIO_ACCESS_KEY || 'minioadmin'
 const minioSecretKey = process.env.MINIO_SECRET_KEY || 'minioadmin'
+const bucketName = 'content'
 
 const minioClient = new Client({
   endPoint: minioEndpoint,
@@ -15,21 +16,67 @@ const minioClient = new Client({
   secretKey: minioSecretKey
 })
 
+// Ensure bucket exists
+async function ensureBucket() {
+  try {
+    const exists = await minioClient.bucketExists(bucketName)
+    if (!exists) {
+      await minioClient.makeBucket(bucketName)
+      console.log(`Created bucket ${bucketName}`)
+    }
+  } catch (err) {
+    console.error('Error ensuring bucket exists:', err)
+    throw err
+  }
+}
+
+async function downloadAndStore(url: string): Promise<string> {
+  const response = await fetch(url)
+  if (!response.ok) {
+    throw new Error(`Failed to download: ${response.statusText}`)
+  }
+
+  // Generate object name from URL
+  const objectName = `${Date.now()}-${url.split('/').pop()}`
+  
+  // Upload to MinIO
+  await minioClient.putObject(
+    bucketName,
+    objectName,
+    await response.arrayBuffer()
+  )
+
+  // Get temporary URL for the object
+  const presignedUrl = await minioClient.presignedGetObject(bucketName, objectName, 24*60*60) // 24 hour expiry
+  
+  return presignedUrl
+}
+
 export async function POST(request: Request) {
   try {
     const data = await request.json()
     const { url } = data
 
-    // TODO: Download from URL and store in MinIO
-    // For now, just echo back the URL
+    if (!url) {
+      return NextResponse.json({ error: 'URL required' }, { status: 400 })
+    }
+
+    await ensureBucket()
+    const storedUrl = await downloadAndStore(url)
+
     const playMessage: WebSocketMessage = {
       type: 'play',
-      url
+      url: storedUrl
     }
+
+    // Broadcast to connected displays
+    // TODO: Use WebSocket server to broadcast
 
     return NextResponse.json({ success: true, message: playMessage })
   } catch (error) {
     console.error('Upload error:', error)
-    return NextResponse.json({ error: 'Upload failed' }, { status: 500 })
+    return NextResponse.json({ 
+      error: error instanceof Error ? error.message : 'Upload failed' 
+    }, { status: 500 })
   }
 }
