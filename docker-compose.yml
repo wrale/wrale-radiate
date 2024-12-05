@@ -1,0 +1,48 @@
+version: '3.8'
+
+services:
+  # Main Next.js application
+  webapp:
+    build:
+      context: .
+      dockerfile: Dockerfile.webapp
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./webapp:/app
+      - /app/node_modules
+    environment:
+      - NODE_ENV=development
+      - MINIO_ENDPOINT=minio:9000
+      - MINIO_ACCESS_KEY=minioadmin
+      - MINIO_SECRET_KEY=minioadmin
+    depends_on:
+      - minio
+
+  # MinIO for asset storage (simpler than S3 for local dev)
+  minio:
+    image: minio/minio
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio_data:/data
+    environment:
+      - MINIO_ROOT_USER=minioadmin
+      - MINIO_ROOT_PASSWORD=minioadmin
+    command: server --console-address ":9001" /data
+
+  # Display client simulator (for testing)
+  display-client:
+    build:
+      context: .
+      dockerfile: Dockerfile.display
+    ports:
+      - "3001:3000"
+    environment:
+      - NEXT_PUBLIC_MGMT_SERVER=ws://webapp:3000
+    depends_on:
+      - webapp
+
+volumes:
+  minio_data:
