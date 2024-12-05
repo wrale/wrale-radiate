@@ -1,90 +1,70 @@
-"use client"
-
 import { useState } from 'react'
 
-export const ContentUpload = () => {
+export function ContentUpload() {
   const [uploading, setUploading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const [success, setSuccess] = useState(false)
+  const [error, setError] = useState('')
+  const [success, setSuccess] = useState('')
 
-  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault()
-    const formData = new FormData(e.currentTarget)
-    const file = formData.get('file')
+  const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!e.target.files || !e.target.files[0]) return
 
-    if (!file) {
-      setError('Please select a file')
-      return
-    }
+    setUploading(true)
+    setError('')
+    setSuccess('')
+
+    const file = e.target.files[0]
+    const formData = new FormData()
+    formData.append('file', file)
 
     try {
-      setUploading(true)
-      setError(null)
-      setSuccess(false)
-
       const response = await fetch('/api/upload', {
         method: 'POST',
         body: formData,
       })
 
+      const data = await response.json()
+
       if (!response.ok) {
-        throw new Error('Upload failed')
+        throw new Error(data.error || 'Upload failed')
       }
 
-      const data = await response.json()
-      console.log('Upload successful:', data)
-      setSuccess(true)
-
-      // Reset form
-      e.currentTarget.reset()
+      setSuccess('File uploaded successfully!')
+      e.target.value = '' // Reset input
     } catch (err) {
-      console.error('Upload error:', err)
-      setError('Upload failed. Please try again.')
+      setError(err instanceof Error ? err.message : 'Upload failed')
     } finally {
       setUploading(false)
     }
   }
 
   return (
-    <div className="max-w-xl p-4 border rounded-lg">
-      <form className="space-y-4" onSubmit={handleSubmit}>
-        <div>
-          <label htmlFor="file" className="block text-sm font-medium mb-1">
-            Upload Video Content
-          </label>
-          <input
-            type="file"
-            id="file"
-            name="file"
-            className="w-full"
-            accept="video/mp4,video/x-m4v,video/*"
-            onChange={() => {
-              setError(null)
-              setSuccess(false)
-            }}
-          />
-        </div>
-
-        {error && (
-          <div className="text-sm text-red-600">
-            {error}
-          </div>
-        )}
-
-        {success && (
-          <div className="text-sm text-green-600">
-            Upload successful!
-          </div>
-        )}
-
-        <button
-          type="submit"
+    <div className="space-y-4">
+      <div>
+        <input
+          type="file"
+          onChange={handleUpload}
           disabled={uploading}
-          className={`px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 disabled:bg-blue-300 disabled:cursor-not-allowed`}
-        >
-          {uploading ? 'Uploading...' : 'Upload'}
-        </button>
-      </form>
+          accept="video/*"
+          className="block w-full text-sm text-gray-500
+            file:mr-4 file:py-2 file:px-4
+            file:rounded-md file:border-0
+            file:text-sm file:font-semibold
+            file:bg-blue-50 file:text-blue-700
+            hover:file:bg-blue-100"
+        />
+      </div>
+
+      {uploading && (
+        <p className="text-gray-500">Uploading...</p>
+      )}
+
+      {error && (
+        <p className="text-red-500">{error}</p>
+      )}
+
+      {success && (
+        <p className="text-green-500">{success}</p>
+      )}
     </div>
   )
 }

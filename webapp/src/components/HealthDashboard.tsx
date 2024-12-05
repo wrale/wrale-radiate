@@ -1,36 +1,36 @@
-"use client"
-
 import { useEffect, useState } from 'react'
 
-interface DisplayHealth {
-  displayId: string
-  status: string
-  currentTime?: number
-  duration?: number
+type DisplayStatus = {
+  id: string
+  status: 'online' | 'offline'
+  lastUpdate: string
 }
 
-export const HealthDashboard = () => {
-  const [displays, setDisplays] = useState<Record<string, DisplayHealth>>({})
+export function HealthDashboard() {
+  const [displays, setDisplays] = useState<DisplayStatus[]>([])
 
   useEffect(() => {
-    const ws = new WebSocket(`ws://${window.location.host}/api/ws`)
+    // WebSocket connection for real-time updates
+    const ws = new WebSocket('ws://localhost:3000')
 
     ws.onmessage = (event) => {
       try {
-        const message = JSON.parse(event.data)
-        if (message.type === 'health') {
-          setDisplays(prev => ({
-            ...prev,
-            [message.displayId]: {
-              displayId: message.displayId,
-              status: message.status,
-              currentTime: message.currentTime,
-              duration: message.duration
+        const data = JSON.parse(event.data)
+        if (data.type === 'status') {
+          setDisplays(current => {
+            const index = current.findIndex(d => d.id === data.id)
+            if (index >= 0) {
+              return [
+                ...current.slice(0, index),
+                { ...data, lastUpdate: new Date().toISOString() },
+                ...current.slice(index + 1)
+              ]
             }
-          }))
+            return [...current, { ...data, lastUpdate: new Date().toISOString() }]
+          })
         }
-      } catch (err) {
-        console.error('Error processing message:', err)
+      } catch (error) {
+        console.error('WebSocket message error:', error)
       }
     }
 
@@ -38,33 +38,35 @@ export const HealthDashboard = () => {
   }, [])
 
   return (
-    <div className="max-w-4xl p-4 border rounded-lg">
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {Object.values(displays).map((display) => (
-          <div key={display.displayId} className="p-4 border rounded">
-            <h3 className="font-medium mb-2">Display {display.displayId}</h3>
-            
-            <div className="space-y-2">
-              <div className="flex items-center space-x-2">
-                <div className={`w-3 h-3 rounded-full ${display.status === 'playing' ? 'bg-green-500' : 'bg-blue-500'}`} />
-                <span className="capitalize">{display.status}</span>
+    <div className="space-y-4">
+      {displays.length === 0 ? (
+        <p className="text-gray-500">No displays connected</p>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {displays.map((display) => (
+            <div
+              key={display.id}
+              className="p-4 rounded-lg border border-gray-200"
+            >
+              <div className="flex items-center justify-between">
+                <h3 className="font-medium">{display.id}</h3>
+                <span
+                  className={`px-2 py-1 rounded text-sm ${
+                    display.status === 'online'
+                      ? 'bg-green-100 text-green-800'
+                      : 'bg-red-100 text-red-800'
+                  }`}
+                >
+                  {display.status}
+                </span>
               </div>
-
-              {display.currentTime !== undefined && display.duration !== undefined && (
-                <div className="text-sm text-gray-600">
-                  {Math.floor(display.currentTime)}s / {Math.floor(display.duration)}s
-                </div>
-              )}
+              <p className="text-sm text-gray-500 mt-2">
+                Last update: {new Date(display.lastUpdate).toLocaleString()}
+              </p>
             </div>
-          </div>
-        ))}
-
-        {Object.keys(displays).length === 0 && (
-          <div className="p-4 border rounded text-gray-500">
-            No displays connected
-          </div>
-        )}
-      </div>
+          ))}
+        </div>
+      )}
     </div>
   )
 }
