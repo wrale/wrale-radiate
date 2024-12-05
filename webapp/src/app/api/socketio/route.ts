@@ -1,15 +1,19 @@
 import { Server as NetServer } from 'http'
 import { Server as SocketIOServer } from 'socket.io'
+import { NextApiHandler } from 'next'
 import { NextResponse } from 'next/server'
 
-export function GET(req: Request, { params }: { params: Record<string, string> }) {
-  try {
-    // @ts-ignore
-    if (!global.io) {
-      console.log('Creating Socket.IO server')
-      const netServer = req.socket.server as unknown as NetServer
-      // @ts-ignore
-      global.io = new SocketIOServer(netServer, {
+let io: SocketIOServer
+
+export async function GET() {
+  if (process.env.NODE_ENV !== 'production') {
+    // Attach Socket.IO to the Next.js server instance
+    const res = NextResponse.next()
+    const server = (res as any)?.socket?.server
+
+    if (server && !server.io) {
+      console.log('Setting up Socket.IO server')
+      server.io = new SocketIOServer(server, {
         path: '/api/socketio',
         addTrailingSlash: false,
         cors: {
@@ -18,12 +22,12 @@ export function GET(req: Request, { params }: { params: Record<string, string> }
         }
       })
 
-      // @ts-ignore
-      global.io.on('connection', (socket) => {
+      server.io.on('connection', (socket) => {
         console.log('Client connected:', socket.id)
 
         socket.on('message', (message) => {
           console.log('Message received:', message)
+          // Broadcast to all except sender
           socket.broadcast.emit('message', message)
         })
 
@@ -32,10 +36,9 @@ export function GET(req: Request, { params }: { params: Record<string, string> }
         })
       })
     }
-
-    return NextResponse.json({ success: true })
-  } catch (error) {
-    console.error('Socket.IO initialization error:', error)
-    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 })
   }
+
+  return new Response('Socket.IO endpoint', { status: 200 })
 }
+
+export const dynamic = 'force-dynamic'
