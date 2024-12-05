@@ -1,54 +1,104 @@
 # Wrale Radiate ANDA Documentation
 
-This documentation follows REST-like organization principles where actors, resources, and their interactions are first-class concepts.
+This documentation focuses on the core steel thread of the Wrale Radiate system.
 
-## Structure
+## Steel Thread Definition
+
+The steel thread represents the minimal viable path for content to flow from creation to display with confirmation:
+
+1. Store an asset
+2. Get it to a display
+3. Show it correctly
+4. Know if it worked
+
+## Core Components
+
+### Actors
+- Marketing Team (MKTG) - Creates and manages content
+- Basic Display (DISPLAY_BASIC) - Shows content
+- IT Operations (IT_OPS) - Monitors system health
+
+### Needs
+- Content Management (MKTG_CONTENT_MGMT) - Upload and organize content
+- Basic Rendering (DISP_BASIC_RENDER) - Show content on displays
+- Display Health (DISP_BASIC_HEALTH) - Report display status
+- Basic Monitoring (IT_HEALTH_BASIC) - Monitor overall system health
+
+### Capabilities
+- Asset Library (CAP_ASSET_LIB) - Store and organize content
+- Content Transport (CAP_CONTENT_TRANSPORT) - Move content to displays
+- Basic Renderer (CAP_BASIC_RENDER) - Display content
+- Health Monitor (CAP_DISPLAY_HEALTH) - Track status
+
+## Flow Diagram
+
+```mermaid
+graph TB
+    %% Actors
+    subgraph Actors
+        MKTG[Corporate Marketing]
+        DISPLAY[Basic Display]
+        IT[IT Ops]
+    end
+
+    %% Needs
+    subgraph Needs
+        N1[Content Management<br/>MKTG_CONTENT_MGMT]
+        N2[Basic Rendering<br/>DISP_BASIC_RENDER]
+        N3[Display Health<br/>DISP_BASIC_HEALTH]
+        N4[Basic Monitoring<br/>IT_HEALTH_BASIC]
+    end
+
+    %% Capabilities
+    subgraph Capabilities
+        C1[Asset Library<br/>CAP_ASSET_LIB]
+        C2[Content Transport<br/>CAP_CONTENT_TRANSPORT]
+        C3[Basic Renderer<br/>CAP_BASIC_RENDER]
+        C4[Health Monitor<br/>CAP_DISPLAY_HEALTH]
+    end
+
+    %% Actor to Need relationships
+    MKTG --> N1
+    DISPLAY --> N2
+    DISPLAY --> N3
+    IT --> N4
+
+    %% Need to Capability relationships
+    N1 --> C1
+    N1 --> C2
+    N2 --> C3
+    N3 --> C4
+    N4 --> C4
+
+    %% Flow direction
+    C1 -..->|content| C2
+    C2 -..->|content| C3
+    C3 -..->|status| C4
+```
+
+## Implementation Focus
+
+1. Each component should be implemented in its simplest viable form
+2. Avoid premature optimization or unnecessary complexity
+3. Focus on establishing the basic content flow before adding features
+4. Health monitoring should confirm only basic content delivery and display
+
+## Directory Structure
 
 ```
 docs/anda/
-├── README.md           # This overview document
-├── actors/              # Each actor and their needs
-│   ├── README.md        # Actor overview
-│   ├── composer/        # Content composer actor
-│   │   └── README.md   # Needs, constraints, success criteria
-│   └── display/         # Display node actor
-│       └── README.md   # Needs, constraints, success criteria
-├── resources/          # System resources
-│   ├── README.md        # Resource overview
-│   ├── manifest/        # Content manifest resource
-│   │   └── README.md   # Schema, states, validation
-│   ├── content/         # Content resource
-│   │   └── README.md   # Types, storage, delivery
-│   └── status/          # Status resource
-│       └── README.md   # Schema, updates, aggregation
-├── interactions/       # How actors use resources
-│   ├── README.md        # Interaction overview
-│   ├── distribution/     # Content distribution flows
-│   │   └── README.md   # Upload, delivery, caching
-│   ├── monitoring/       # Status monitoring flows
-│   │   └── README.md   # Reporting, aggregation
-│   └── synchronization/  # Timing synchronization
-│       └── README.md   # Mechanisms, adjustments
-├── states/             # System states
-│   ├── README.md        # State overview
-│   ├── playback/        # Playback states
-│   │   └── README.md   # Normal, error, recovery
-│   └── deployment/      # Deployment states
-│       └── README.md   # Upload, distribution, verify
-└── decisions/          # Architectural decisions
-    ├── README.md        # Decision overview
-    ├── distribution/     # Content distribution choices
-    │   └── README.md   # Why hybrid approach
-    └── monitoring/       # Status monitoring choices
-        └── README.md   # Why long-poll
+├── README.md           # This overview
+├── actors/            # Core actor documentation
+│   ├── marketing.md   # Marketing team needs
+│   ├── display.md     # Display needs
+│   └── it-ops.md     # IT operations needs
+├── capabilities/      # Core capability documentation
+│   ├── asset-lib.md   # Asset library 
+│   ├── transport.md   # Content transport
+│   ├── renderer.md    # Basic renderer
+│   └── health.md      # Health monitoring
+└── decisions/        # Key architectural decisions
+    └── steel-thread.md # Why these components
 ```
 
-## Navigation
-
-1. [actors/](actors/) - Who uses the system and what they need
-2. [resources/](resources/) - What they interact with
-3. [interactions/](interactions/) - How they work together
-4. [states/](states/) - System behavior and transitions
-5. [decisions/](decisions/) - Why we built it this way
-
-Each major concept has its own directory with a README.md providing an overview, and subdirectories for specific instances of that concept, each with their own README.md containing the details.
+Each component documentation focuses only on what's needed for the steel thread functionality.
