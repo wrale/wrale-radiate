@@ -54,7 +54,7 @@ async function downloadAndStore(url: string): Promise<string> {
     throw new Error('Failed to get response stream')
   }
 
-  // Convert ReadableStream to Node.js Readable stream
+  // Convert Web ReadableStream to Node.js Readable stream
   const readable = Readable.fromWeb(bodyStream)
 
   // Upload to MinIO using streams
