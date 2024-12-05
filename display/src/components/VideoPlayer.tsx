@@ -22,16 +22,20 @@ export const VideoPlayer = () => {
         return
       }
 
-      // Add client ID to WebSocket URL
-      const wsUrl = `${wsBaseUrl}?clientId=${clientId}`
-
       try {
+        // Update URL to use page route instead of app route
+        const wsUrl = wsBaseUrl.replace('/api/ws', '/api/ws')
         console.log('Attempting to connect to:', wsUrl)
+
+        if (wsRef.current) {
+          wsRef.current.close()
+        }
+
         const ws = new WebSocket(wsUrl)
         wsRef.current = ws
 
         ws.onopen = () => {
-          console.log('WebSocket connected with ID:', clientId)
+          console.log('WebSocket connected')
           setStatus('ready')
           setError('')
           // Send initial health report
@@ -51,7 +55,7 @@ export const VideoPlayer = () => {
               videoRef.current.play()
               setStatus('playing')
             } else if (msg.type === 'connected') {
-              console.log('Connection acknowledged by server')
+              console.log('Connection acknowledged')
             }
           } catch (err) {
             console.error('Error processing message:', err)
@@ -67,13 +71,14 @@ export const VideoPlayer = () => {
         ws.onclose = () => {
           console.log('WebSocket closed, scheduling retry...')
           setStatus('connecting')
+          wsRef.current = null
           // Schedule retry
           retryTimeout = setTimeout(connectWebSocket, RETRY_INTERVAL)
         }
 
         // Start health reporting interval
         const healthInterval = setInterval(() => {
-          if (ws.readyState === WebSocket.OPEN) {
+          if (ws && ws.readyState === WebSocket.OPEN) {
             ws.send(JSON.stringify({
               type: 'health',
               status,
@@ -86,7 +91,9 @@ export const VideoPlayer = () => {
 
         return () => {
           clearInterval(healthInterval)
-          ws.close()
+          if (ws && ws.readyState === WebSocket.OPEN) {
+            ws.close()
+          }
         }
       } catch (err) {
         console.error('Error setting up WebSocket:', err)
