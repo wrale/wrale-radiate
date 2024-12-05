@@ -3,7 +3,22 @@ import { NextResponse } from 'next/server';
 // Enable edge runtime
 export const runtime = 'edge';
 
-const connectedClients = new Set<WebSocket>();
+interface WebSocketEventMap {
+  message: MessageEvent;
+  close: CloseEvent;
+}
+
+type WebSocketEventListener<K extends keyof WebSocketEventMap> = 
+  (event: WebSocketEventMap[K]) => void;
+
+interface ExtendedWebSocket extends WebSocket {
+  addEventListener<K extends keyof WebSocketEventMap>(
+    type: K,
+    listener: WebSocketEventListener<K>
+  ): void;
+}
+
+const connectedClients = new Set<ExtendedWebSocket>();
 
 export async function GET(request: Request) {
   if (!request.headers.get('upgrade')?.toLowerCase().includes('websocket')) {
@@ -23,9 +38,9 @@ export async function GET(request: Request) {
 
     // Handle socket events
     socket.accept();
-    connectedClients.add(socket);
+    connectedClients.add(socket as ExtendedWebSocket);
 
-    socket.addEventListener('message', (event) => {
+    socket.addEventListener('message', (event: MessageEvent) => {
       console.log('Received message:', event.data);
       // Broadcast to all other clients
       connectedClients.forEach((client) => {
@@ -36,7 +51,7 @@ export async function GET(request: Request) {
     });
 
     socket.addEventListener('close', () => {
-      connectedClients.delete(socket);
+      connectedClients.delete(socket as ExtendedWebSocket);
     });
 
     return response;
