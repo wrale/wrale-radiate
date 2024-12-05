@@ -1,52 +1,46 @@
 import { headers } from 'next/headers'
 import { NextRequest, NextResponse } from 'next/server'
-import type { CustomWebSocket, CustomWebSocketServer, WebSocketMessage } from '@/lib/types'
+import { WebSocketServer } from 'ws'
+import type { WebSocketMessage } from '@/lib/types'
 
 export const dynamic = 'force-dynamic'
 
-export async function GET(req: NextRequest) {
-  const headersList = headers()
-  const upgrade = headersList.get('upgrade')
-  
-  if (upgrade?.toLowerCase() !== 'websocket') {
-    return new NextResponse('Expected Websocket connection', { status: 426 })
+export async function GET(request: NextRequest) {
+  // Check for WebSocket upgrade
+  const upgradeHeader = headers().get('upgrade')
+  if (upgradeHeader?.toLowerCase() !== 'websocket') {
+    return new Response('Expected WebSocket connection', { status: 426 })
   }
 
   try {
-    // @ts-ignore - Next.js provides these in Edge Runtime
-    const webSocketServer: CustomWebSocketServer = new WebSocketServer({
-      noServer: true
-    })
+    const { socket, response } = Deno.upgradeWebSocket(request)
 
-    webSocketServer.on('connection', (ws: CustomWebSocket) => {
+    socket.onopen = () => {
       console.log('Display connected')
+    }
 
-      ws.on('message', (data: Buffer) => {
-        try {
-          const message = JSON.parse(data.toString()) as WebSocketMessage
-          console.log('Message received:', message)
-          
-          if (message.type === 'health') {
-            console.log(`Display ${message.displayId}: ${message.status}`)
-            ws.send(JSON.stringify({ type: 'ack' }))
-          }
-        } catch (err) {
-          console.error('Error handling message:', err)
-          ws.send(JSON.stringify({ type: 'error', error: 'Invalid message format' }))
+    socket.onmessage = (event) => {
+      try {
+        const message = JSON.parse(event.data) as WebSocketMessage
+        console.log('Message received:', message)
+        
+        if (message.type === 'health') {
+          console.log(`Display ${message.displayId}: ${message.status}`)
+          socket.send(JSON.stringify({ type: 'ack' }))
         }
-      })
+      } catch (err) {
+        console.error('Error handling message:', err)
+        socket.send(JSON.stringify({ type: 'error', error: 'Invalid message format' }))
+      }
+    }
 
-      ws.on('close', () => {
-        console.log('Display disconnected')
-      })
-    })
+    socket.onclose = () => {
+      console.log('Display disconnected')
+    }
 
-    const response = new NextResponse()
-    // @ts-ignore - Next.js WebSocket handling
-    response.socket = await webSocketServer.handleUpgrade(req)
     return response
   } catch (err) {
     console.error('WebSocket setup failed:', err)
-    return new NextResponse('WebSocket setup failed', { status: 500 })
+    return new Response('WebSocket setup failed', { status: 500 })
   }
 }
