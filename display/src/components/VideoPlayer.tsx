@@ -32,7 +32,9 @@ export const VideoPlayer = () => {
         reconnection: true,
         reconnectionDelay: 1000,
         reconnectionDelayMax: 5000,
-        reconnectionAttempts: 10
+        reconnectionAttempts: 10,
+        withCredentials: true,
+        timeout: 45000
       })
 
       socketRef.current = socket
@@ -87,6 +89,10 @@ export const VideoPlayer = () => {
       // Set up automatic reconnection
       socket.io.on('reconnect_attempt', (attempt) => {
         console.log(`Reconnection attempt ${attempt}`)
+      })
+
+      socket.io.on('error', (error) => {
+        console.error('Transport error:', error)
       })
 
       return () => {
