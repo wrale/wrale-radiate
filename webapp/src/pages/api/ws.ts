@@ -39,9 +39,13 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
   }
 
   try {
+    if (!wss) {
+      throw new Error('WebSocket server not initialized')
+    }
+
     // @ts-ignore - req.socket is available
     wss.handleUpgrade(req, req.socket, Buffer.alloc(0), (ws) => {
-      wss.emit('connection', ws)
+      wss?.emit('connection', ws)
     })
   } catch (err) {
     console.error('WebSocket upgrade failed:', err)
