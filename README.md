@@ -24,19 +24,71 @@ This implementation focuses on the minimal viable path:
 
 ## Quick Start
 
+The project supports both Docker Compose and Podman Compose. Use the Makefile for consistent operation:
+
 ```bash
-# Start the development environment
-docker compose up
+# Check requirements and initialize
+make init
 
-# Visit management interface
-open http://localhost:3000
+# Start all services
+make up
 
-# Visit display simulator
-open http://localhost:3001
+# Open interfaces in browser
+make open
+
+# View logs
+make logs
 ```
 
-## Technology Stack
+## Development
 
+### Container Access
+```bash
+# Access webapp shell
+make shell-webapp
+
+# Access display client shell
+make shell-display
+
+# View specific logs
+make webapp-logs
+make display-logs
+```
+
+### Clean Up
+```bash
+# Stop services
+make down
+
+# Full cleanup (including volumes)
+make clean
+```
+
+## Architecture
+
+### Technology Stack
 - TypeScript/Next.js for all components
 - MinIO for content storage
 - WebSocket for real-time updates
+
+### Components
+1. Management Interface (Port 3000)
+   - Content upload and management
+   - Display health monitoring
+   - Real-time status updates
+
+2. Display Client (Port 3001)
+   - Video playback
+   - Health reporting
+   - WebSocket connectivity
+
+3. Storage
+   - MinIO for video assets
+   - Local volume persistence
+
+## Development Status
+
+This is a steel thread implementation, focusing on proving the core workflow. It provides:
+- ✅ End-to-end content flow
+- ✅ Real-time health monitoring
+- ✅ Basic display simulation
