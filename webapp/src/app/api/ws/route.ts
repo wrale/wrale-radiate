@@ -1,45 +1,47 @@
 import { NextResponse } from 'next/server';
-import type { NextApiResponse } from 'next';
-import { Server as HTTPServer } from 'http';
-import { Socket } from 'net';
-import { WebSocketServer } from 'ws';
 
-interface ResponseWithSocket extends NextApiResponse {
-  socket: Socket & {
-    server: HTTPServer & {
-      ws?: WebSocketServer;
-    };
-  };
-}
+// Enable edge runtime
+export const runtime = 'edge';
 
-export function GET(req: Request) {
-  const response = new NextResponse();
-  
-  // Access the server instance
-  const server = (response as unknown as ResponseWithSocket).socket?.server;
-  
-  if (server && !server.ws) {
-    const wsServer = new WebSocketServer({ noServer: true });
-    
-    wsServer.on('connection', (ws) => {
-      console.log('Client connected');
-      ws.send('Welcome!');
-      
-      ws.on('message', (message) => {
-        console.log('received: %s', message);
-      });
-    });
-    
-    server.ws = wsServer;
-    
-    server.on('upgrade', (request, socket, head) => {
-      wsServer.handleUpgrade(request, socket, head, (ws) => {
-        wsServer.emit('connection', ws, request);
-      });
-    });
+const connectedClients = new Set<WebSocket>();
+
+export async function GET(request: Request) {
+  if (!request.headers.get('upgrade')?.toLowerCase().includes('websocket')) {
+    return new NextResponse('Expected websocket connection', { status: 400 });
   }
-  
-  return NextResponse.json({ ok: true });
-}
 
-export const dynamic = 'force-dynamic';
+  try {
+    // Create WebSocket pair
+    const { socket, response } = Reflect.get(globalThis, 'WebSocketPair')
+      ? new (Reflect.get(globalThis, 'WebSocketPair'))() 
+      : { socket: undefined, response: undefined };
+
+    if (!socket || !response) {
+      console.error('WebSocket creation failed');
+      return new NextResponse('WebSocket initialization failed', { status: 500 });
+    }
+
+    // Handle socket events
+    socket.accept();
+    connectedClients.add(socket);
+
+    socket.addEventListener('message', (event) => {
+      console.log('Received message:', event.data);
+      // Broadcast to all other clients
+      connectedClients.forEach((client) => {
+        if (client !== socket && client.readyState === WebSocket.OPEN) {
+          client.send(event.data);
+        }
+      });
+    });
+
+    socket.addEventListener('close', () => {
+      connectedClients.delete(socket);
+    });
+
+    return response;
+  } catch (err) {
+    console.error('WebSocket handler error:', err);
+    return new NextResponse('WebSocket setup failed', { status: 500 });
+  }
+}
