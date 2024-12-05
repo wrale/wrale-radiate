@@ -1,34 +1,63 @@
-import { WebSocketServer } from 'ws'
-import type { CustomWebSocket, WebSocketMessage } from './types'
+class WebSocketServer {
+  private static instance: WebSocketServer
+  private clients: Set<WebSocket>
 
-let wss: WebSocketServer | null = null
+  private constructor() {
+    this.clients = new Set()
+  }
 
-export function getWebSocketServer() {
-  if (!wss) {
-    wss = new WebSocketServer({ noServer: true })
+  public static getInstance(): WebSocketServer {
+    if (!WebSocketServer.instance) {
+      WebSocketServer.instance = new WebSocketServer()
+    }
+    return WebSocketServer.instance
+  }
 
-    wss.on('connection', (ws: CustomWebSocket) => {
-      console.log('Client connected')
+  public async handleUpgrade(request: Request, socket: any) {
+    try {
+      const webSocket = await new Promise<WebSocket>((resolve, reject) => {
+        const ws = new WebSocket(request.url)
+        
+        ws.onopen = () => resolve(ws)
+        ws.onerror = reject
+      })
 
-      ws.on('message', (data: Buffer) => {
+      this.clients.add(webSocket)
+
+      webSocket.onmessage = (event) => {
         try {
-          const message: WebSocketMessage = JSON.parse(data.toString())
-          // Broadcast to all clients
-          wss?.clients.forEach((client: CustomWebSocket) => {
-            if (client !== ws) {
+          const message = JSON.parse(event.data)
+          console.log('Received message:', message)
+
+          // Broadcast to all other clients
+          this.clients.forEach((client) => {
+            if (client !== webSocket && client.readyState === WebSocket.OPEN) {
               client.send(JSON.stringify(message))
             }
           })
         } catch (error) {
-          console.error('WebSocket message error:', error)
+          console.error('Error processing message:', error)
         }
-      })
+      }
 
-      ws.on('close', () => {
+      webSocket.onclose = () => {
         console.log('Client disconnected')
-      })
+        this.clients.delete(webSocket)
+      }
+
+    } catch (error) {
+      console.error('WebSocket connection error:', error)
+      throw error
+    }
+  }
+
+  public broadcast(message: any) {
+    this.clients.forEach((client) => {
+      if (client.readyState === WebSocket.OPEN) {
+        client.send(JSON.stringify(message))
+      }
     })
   }
-  
-  return wss
 }
+
+export { WebSocketServer }

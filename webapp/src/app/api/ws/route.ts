@@ -1,67 +1,28 @@
-import { WebSocket } from 'ws'
+import { WebSocketServer } from '@/lib/websocket'
 
-// Mark this route as using the Edge Runtime
+// Use Edge Runtime
 export const runtime = 'edge'
 
-// Store connected clients
-const clients = new Set<WebSocket>()
-
 export async function GET(request: Request) {
-  const { socket, response } = Reflect.get(request, 'socket')
-  
-  if (request.headers.get('upgrade') !== 'websocket') {
-    return new Response('Expected Websocket', { status: 426 })
-  }
-
   try {
-    const webSocket = await new Promise<WebSocket>((resolve, reject) => {
-      const wss = new WebSocket.Server({ noServer: true })
-      
-      wss.once('connection', (ws) => {
-        clients.add(ws)
-        resolve(ws)
-      })
+    if (!process.env.NEXT_EDGE_WEB_SOCKET) {
+      return new Response('WebSocket not enabled', { status: 500 })
+    }
 
-      wss.once('error', reject)
+    if (!request.headers.get('upgrade')?.includes('websocket')) {
+      return new Response('Expected WebSocket upgrade', { status: 426 })
+    }
 
-      wss.handleUpgrade(request as any, socket, Buffer.alloc(0), (ws) => {
-        wss.emit('connection', ws)
-      })
-    })
+    const { socket, response } = Reflect.get(request, 'socket')
 
-    webSocket.on('message', (data) => {
-      try {
-        const message = JSON.parse(data.toString())
-        console.log('Received message:', message)
+    // Get the singleton WebSocket server
+    const wss = WebSocketServer.getInstance()
 
-        // Broadcast to all other clients
-        clients.forEach((client) => {
-          if (client !== webSocket && client.readyState === WebSocket.OPEN) {
-            client.send(JSON.stringify(message))
-          }
-        })
-      } catch (error) {
-        console.error('Error processing message:', error)
-      }
-    })
-
-    webSocket.on('close', () => {
-      console.log('Client disconnected')
-      clients.delete(webSocket)
-    })
+    await wss.handleUpgrade(request, socket)
 
     return response
   } catch (error) {
-    console.error('WebSocket error:', error)
-    return new Response('WebSocket error', { status: 500 })
+    console.error('WebSocket setup error:', error)
+    return new Response('WebSocket setup failed', { status: 500 })
   }
-}
-
-// Helper function to broadcast to all clients
-export function broadcast(message: any) {
-  clients.forEach((client) => {
-    if (client.readyState === WebSocket.OPEN) {
-      client.send(JSON.stringify(message))
-    }
-  })
 }
