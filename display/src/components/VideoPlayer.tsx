@@ -12,14 +12,18 @@ export const VideoPlayer = () => {
 
   useEffect(() => {
     let retryTimeout: NodeJS.Timeout
+    const clientId = `display-${Math.random().toString(36).substring(7)}`
 
     const connectWebSocket = () => {
-      const wsUrl = process.env.NEXT_PUBLIC_MGMT_SERVER
-      if (!wsUrl) {
+      const wsBaseUrl = process.env.NEXT_PUBLIC_MGMT_SERVER
+      if (!wsBaseUrl) {
         setError('Management server URL not configured')
         setStatus('error')
         return
       }
+
+      // Add client ID to WebSocket URL
+      const wsUrl = `${wsBaseUrl}?clientId=${clientId}`
 
       try {
         console.log('Attempting to connect to:', wsUrl)
@@ -27,14 +31,14 @@ export const VideoPlayer = () => {
         wsRef.current = ws
 
         ws.onopen = () => {
-          console.log('WebSocket connected')
+          console.log('WebSocket connected with ID:', clientId)
           setStatus('ready')
           setError('')
           // Send initial health report
           ws.send(JSON.stringify({
             type: 'health',
             status: 'ready',
-            displayId: 'display-1'
+            displayId: clientId
           }))
         }
 
@@ -73,7 +77,7 @@ export const VideoPlayer = () => {
             ws.send(JSON.stringify({
               type: 'health',
               status,
-              displayId: 'display-1',
+              displayId: clientId,
               currentTime: videoRef.current?.currentTime,
               duration: videoRef.current?.duration
             }))
@@ -113,8 +117,8 @@ export const VideoPlayer = () => {
       />
       
       {status !== 'playing' && (
-        <div className="absolute inset-0 flex items-center justify-center text-white">
-          <span className="text-xl">
+        <div className="absolute inset-0 flex items-center justify-center text-white bg-black bg-opacity-50">
+          <span className="text-xl font-semibold">
             {status === 'connecting' && 'Connecting...'}
             {status === 'ready' && 'Ready for content'}
             {status === 'error' && `Error: ${error}`}
