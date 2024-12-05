@@ -39,11 +39,14 @@ async function downloadAndStore(url: string): Promise<string> {
   // Generate object name from URL
   const objectName = `${Date.now()}-${url.split('/').pop()}`
   
+  // Get response as Buffer for MinIO
+  const buffer = Buffer.from(await response.arrayBuffer())
+  
   // Upload to MinIO
   await minioClient.putObject(
     bucketName,
     objectName,
-    await response.arrayBuffer()
+    buffer
   )
 
   // Get temporary URL for the object
@@ -68,9 +71,6 @@ export async function POST(request: Request) {
       type: 'play',
       url: storedUrl
     }
-
-    // Broadcast to connected displays
-    // TODO: Use WebSocket server to broadcast
 
     return NextResponse.json({ success: true, message: playMessage })
   } catch (error) {
