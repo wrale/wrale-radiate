@@ -115,17 +115,55 @@ async function downloadAndStore(url: string): Promise<string> {
   return presignedUrl
 }
 
+async function storeFile(formData: FormData): Promise<string> {
+  const file = formData.get('file') as File
+  if (!file) {
+    throw new Error('No file provided')
+  }
+
+  // Validate file type
+  const extension = '.' + file.name.split('.').pop()?.toLowerCase()
+  if (!validExtensions.has(extension)) {
+    throw new Error(`Invalid file type. Must be one of: ${Array.from(validExtensions).join(', ')}`)
+  }
+
+  // Read file as array buffer
+  const buffer = Buffer.from(await file.arrayBuffer())
+
+  // Generate unique object name
+  const objectName = `${Date.now()}-${file.name}`
+
+  // Upload to MinIO
+  await minioClient.putObject(
+    bucketName,
+    objectName,
+    buffer,
+    buffer.length
+  )
+
+  // Get temporary URL for the object
+  return await minioClient.presignedGetObject(bucketName, objectName, 24*60*60) // 24 hour expiry
+}
+
 export async function POST(request: Request) {
   try {
-    const data = await request.json()
-    const { url } = data
-
-    if (!url) {
-      return NextResponse.json({ error: 'URL required' }, { status: 400 })
-    }
-
     await ensureBucket()
-    const storedUrl = await downloadAndStore(url)
+
+    let storedUrl: string
+    const contentType = request.headers.get('content-type') || ''
+
+    if (contentType.includes('multipart/form-data')) {
+      // Handle file upload
+      const formData = await request.formData()
+      storedUrl = await storeFile(formData)
+    } else {
+      // Handle URL upload
+      const data = await request.json()
+      if (!data.url) {
+        return NextResponse.json({ error: 'URL required' }, { status: 400 })
+      }
+      storedUrl = await downloadAndStore(data.url)
+    }
 
     const playMessage: WebSocketMessage = {
       type: 'play',
