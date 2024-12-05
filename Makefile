@@ -66,6 +66,13 @@ rebuild: ## Rebuild and restart all services
 	$(COMPOSE_CMD) build --no-cache
 	$(COMPOSE_CMD) up
 
+.PHONY: cycle
+cycle: ## Clean, pull latest changes, initialize, and start services
+	make clean
+	git pull
+	make init
+	make up
+
 # Initialization target that checks requirements
 .PHONY: init
 init: ## Initialize the project and check requirements
