@@ -1,5 +1,3 @@
-import type { WebSocket } from 'ws'
-
 export interface DisplayHealthMessage {
   type: 'health'
   status: 'connecting' | 'ready' | 'playing'
@@ -14,8 +12,3 @@ export interface PlayMessage {
 }
 
 export type WebSocketMessage = DisplayHealthMessage | PlayMessage
-
-// Keep CustomWebSocket for ws package compatibility
-export interface CustomWebSocket extends WebSocket {
-  send(data: string | Buffer): void
-}
