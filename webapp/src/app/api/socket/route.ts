@@ -1,48 +1,47 @@
-import { NextResponse } from 'next/server';
 import { Server as NetServer } from 'http';
 import { Server as SocketIOServer } from 'socket.io';
-import type { NextApiResponse } from 'next';
-import { Socket } from 'net';
+import { NextApiResponse } from 'next';
+import { NextResponse } from 'next/server';
 
-interface ResponseWithSocket extends NextApiResponse {
-  socket: Socket & {
-    server: NetServer & {
-      io?: SocketIOServer;
-    };
-  };
-}
+// Disable edge runtime since Socket.IO needs Node.js
+export const runtime = 'nodejs';
 
-export function GET(req: Request) {
-  const response = new NextResponse();
-  const server = (response as unknown as ResponseWithSocket).socket?.server;
+let io: SocketIOServer;
 
-  if (server && !server.io) {
-    console.log('Creating Socket.IO server...');
-    const io = new SocketIOServer(server);
+export async function GET(req: Request, res: NextApiResponse) {
+  if (!io) {
+    const server = (res as any)?.socket?.server as NetServer;
+    
+    if (!server) {
+      return NextResponse.error();
+    }
+    
+    io = new SocketIOServer(server, {
+      path: '/api/socket',
+      addTrailingSlash: false,
+      cors: {
+        origin: '*',
+        methods: ['GET', 'POST']
+      }
+    });
 
     io.on('connection', (socket) => {
-      const clientId = socket.id;
-      console.log('Client connected:', clientId);
+      console.log('Client connected:', socket.id);
 
-      socket.on('health', (data) => {
-        console.log('Health update from', clientId, ':', data);
+      socket.emit('welcome', 'Welcome to Wrale Radiate!');
+
+      socket.on('message', (data) => {
+        console.log('Message received:', data);
+        io.emit('message', data); // Broadcast to all clients
       });
 
-      socket.emit('connected', { id: clientId });
-
-      socket.on('disconnect', (reason) => {
-        console.log('Client disconnected:', clientId, reason);
-      });
-
-      socket.on('error', (error) => {
-        console.error('Socket error from', clientId, ':', error);
+      socket.on('disconnect', () => {
+        console.log('Client disconnected:', socket.id);
       });
     });
 
-    server.io = io;
+    (res as any).socket.server.io = io;
   }
 
-  return NextResponse.json({ ok: true });
+  return NextResponse.json({ success: true });
 }
-
-export const dynamic = 'force-dynamic';
