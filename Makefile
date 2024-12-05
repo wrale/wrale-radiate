@@ -29,7 +29,11 @@ down: ## Stop and remove all containers
 	$(COMPOSE_CMD) down
 
 .PHONY: clean
-clean: ## Stop and remove all containers, volumes, and images
+clean: ## Stop containers, remove local images/volumes (preserves base images)
+	$(COMPOSE_CMD) down -v --rmi local
+
+.PHONY: clean-all
+clean-all: ## Stop containers, remove ALL images and volumes
 	$(COMPOSE_CMD) down -v --rmi all
 
 .PHONY: logs
