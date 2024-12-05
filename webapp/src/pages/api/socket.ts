@@ -24,7 +24,11 @@ const ioHandler = (req: NextApiRequest, res: NextApiResponseServerIO) => {
     const io = new SocketIOServer(res.socket.server, {
       path: '/api/socket',
       addTrailingSlash: false,
-      cors: false, // Let middleware handle CORS
+      cors: {
+        origin: true, // Let middleware handle actual CORS
+        methods: ['GET', 'POST'],
+        credentials: true
+      },
       transports: ['polling', 'websocket'],
       connectTimeout: 45000,
       pingTimeout: 30000
