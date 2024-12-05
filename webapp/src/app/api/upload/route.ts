@@ -45,15 +45,30 @@ async function downloadAndStore(url: string): Promise<string> {
     throw new Error(`URL must end with a valid video extension (${Array.from(validExtensions).join(', ')})`)
   }
 
-  const response = await fetch(url)
+  // Make the initial request
+  const response = await fetch(url, {
+    redirect: 'follow',     // Follow redirects automatically
+    headers: {
+      'Accept': 'video/*',  // Request video content
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'  // Pretend to be a browser
+    }
+  })
+
   if (!response.ok) {
     throw new Error(`Failed to download: ${response.statusText}`)
   }
 
-  // Get content length and type if available
-  const contentLength = response.headers.get('content-length')
+  // Check if we got HTML instead of video content
   const contentType = response.headers.get('content-type')
-  console.log('Content-Type:', contentType) // Debug log
+  if (contentType?.includes('text/html')) {
+    // Try to extract the actual video URL from the response
+    const text = await response.text()
+    console.log('Received HTML instead of video. Content:', text.substring(0, 500))
+    throw new Error('Received HTML page instead of video file. Please provide direct video URL.')
+  }
+
+  // Log headers for debugging
+  console.log('Response headers:', Object.fromEntries(response.headers.entries()))
 
   // Generate object name from URL
   const objectName = `${Date.now()}-${url.split('/').pop()}`
@@ -77,6 +92,14 @@ async function downloadAndStore(url: string): Promise<string> {
 
   console.log('Total size:', totalSize) // Debug log
   const buffer = Buffer.concat(chunks)
+
+  // Verify we got actual video content (check first few bytes for video file signatures)
+  const firstBytes = buffer.subarray(0, 8)
+  const isMP4 = firstBytes.includes(Buffer.from('ftyp'))
+  if (!isMP4) {
+    console.log('First bytes:', firstBytes)
+    throw new Error('Downloaded content does not appear to be a valid video file')
+  }
 
   // Upload to MinIO
   await minioClient.putObject(
