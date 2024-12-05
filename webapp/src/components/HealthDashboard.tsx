@@ -1,3 +1,5 @@
+'use client';
+
 import { useEffect, useState } from 'react'
 
 type DisplayStatus = {
@@ -11,7 +13,7 @@ export function HealthDashboard() {
 
   useEffect(() => {
     // WebSocket connection for real-time updates
-    const ws = new WebSocket('ws://localhost:3000')
+    const ws = new WebSocket(`ws://${window.location.host}`)
 
     ws.onmessage = (event) => {
       try {
