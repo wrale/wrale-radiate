@@ -1,61 +1,55 @@
 "use client"
 
-import { useEffect, useState } from 'react'
-import { io, Socket } from 'socket.io-client'
+import { useEffect, useState, useCallback } from 'react'
 
 export function WSTest() {
-  const [socket, setSocket] = useState<Socket | null>(null)
+  const [ws, setWs] = useState<WebSocket | null>(null)
   const [status, setStatus] = useState<string>('Initializing...')
   const [messages, setMessages] = useState<string[]>([])
 
-  useEffect(() => {
-    const socketUrl = `http://${window.location.hostname}:3000`
-    console.log('Connecting to socket server:', socketUrl)
+  const connect = useCallback(() => {
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+    const wsUrl = `${protocol}//${window.location.hostname}:3000/api/ws`
+    console.log('Connecting to:', wsUrl)
 
-    const socketIo = io(socketUrl, {
-      path: '/api/socket',
-      transports: ['websocket'],
-      reconnectionDelay: 1000,
-      reconnectionDelayMax: 5000,
-      reconnectionAttempts: 10
-    })
+    const socket = new WebSocket(wsUrl)
 
-    socketIo.on('connect', () => {
-      console.log('Socket connected:', socketIo.id)
+    socket.onopen = () => {
+      console.log('Connected')
       setStatus('Connected')
-    })
-
-    socketIo.on('welcome', (msg) => {
-      console.log('Welcome message:', msg)
-      setMessages(prev => [...prev, `Server: ${msg}`])
-    })
-
-    socketIo.on('message', (msg) => {
-      console.log('Message received:', msg)
-      setMessages(prev => [...prev, `Received: ${msg}`])
-    })
-
-    socketIo.on('disconnect', () => {
-      console.log('Socket disconnected')
-      setStatus('Disconnected - Waiting for reconnection...')
-    })
-
-    socketIo.on('connect_error', (error) => {
-      console.error('Connection error:', error)
-      setStatus(`Connection error: ${error.message}`)
-    })
-
-    setSocket(socketIo)
-
-    return () => {
-      socketIo.disconnect()
+      socket.send('Hello from display client')
     }
+
+    socket.onmessage = (event) => {
+      console.log('Message:', event.data)
+      setMessages(prev => [...prev, event.data])
+    }
+
+    socket.onerror = (error) => {
+      console.error('WebSocket error:', error)
+      setStatus('Error occurred')
+    }
+
+    socket.onclose = () => {
+      console.log('Connection closed')
+      setStatus('Disconnected')
+      setWs(null)
+      // Try to reconnect after 2 seconds
+      setTimeout(connect, 2000)
+    }
+
+    setWs(socket)
   }, [])
 
-  const sendTestMessage = () => {
-    if (socket?.connected) {
+  useEffect(() => {
+    connect()
+    return () => ws?.close()
+  }, [connect])
+
+  const sendMessage = () => {
+    if (ws?.readyState === WebSocket.OPEN) {
       const msg = `Test message at ${new Date().toISOString()}`
-      socket.emit('message', msg)
+      ws.send(msg)
       setMessages(prev => [...prev, `Sent: ${msg}`])
     }
   }
@@ -68,9 +62,9 @@ export function WSTest() {
       </div>
       <div className="mb-4">
         <button
-          onClick={sendTestMessage}
-          disabled={!socket?.connected}
-          className="px-4 py-2 text-white bg-blue-500 rounded disabled:bg-gray-300"
+          onClick={sendMessage}
+          disabled={!ws || ws.readyState !== WebSocket.OPEN}
+          className="px-4 py-2 bg-blue-500 text-white rounded disabled:bg-gray-300"
         >
           Send Test Message
         </button>
