@@ -3,6 +3,8 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
+    "predev": "next telemetry disable",
+    "prebuild": "next telemetry disable",
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
