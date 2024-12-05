@@ -1,7 +1,7 @@
 import { Server as NetServer } from 'http'
 import { NextApiRequest, NextApiResponse } from 'next'
 import { Server as SocketIOServer } from 'socket.io'
-import { getSocketIO, config } from '@/lib/socket'
+import { getSocketIO, config as socketConfig } from '@/lib/socket'
 
 export default function handler(req: NextApiRequest, res: NextApiResponse) {
   if (!res.socket?.server?.io) {
