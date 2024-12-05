@@ -15,9 +15,10 @@ function getConnectionConfig() {
   const serverPort = port === '3001' ? '3000' : port
   
   return {
-    url: `http://${hostname}:${serverPort}`,
+    url: `http://${hostname}`,
     options: {
       path: '/api/socket',
+      port: parseInt(serverPort),
       transports: ['websocket'],
       forceNew: true,
       timeout: 45000,
@@ -25,6 +26,11 @@ function getConnectionConfig() {
       reconnectionDelay: 1000,
       reconnectionDelayMax: 5000,
       reconnectionAttempts: 10,
+      // Ensure the WebSocket upgrade request goes to the right port
+      addTrailingSlash: false,
+      withCredentials: false,
+      autoConnect: false,
+      rejectUnauthorized: false
     }
   }
 }
@@ -45,7 +51,7 @@ export const VideoPlayer = () => {
     }
 
     try {
-      console.log('Connecting to server:', config.url, 'with options:', config.options)
+      console.log('Connecting to server:', config.url, 'with options:', JSON.stringify(config.options, null, 2))
 
       // Close existing connection if any
       if (socketRef.current?.connected) {
@@ -54,6 +60,9 @@ export const VideoPlayer = () => {
 
       const socket = io(config.url, config.options)
       socketRef.current = socket
+
+      // Manually connect since autoConnect is false
+      socket.connect()
 
       socket.on('connect', () => {
         console.log('Connected with ID:', socket.id)
@@ -91,6 +100,18 @@ export const VideoPlayer = () => {
         setStatus('connecting')
       })
 
+      socket.on('error', (error) => {
+        console.error('Socket error:', error)
+      })
+
+      socket.io.on('error', (error) => {
+        console.error('Engine error:', error)
+      })
+
+      socket.io.on('packet', (packet) => {
+        console.log('Packet:', packet)
+      })
+
       // Start health reporting interval
       const healthInterval = setInterval(() => {
         if (socket.connected) {
@@ -101,15 +122,6 @@ export const VideoPlayer = () => {
           })
         }
       }, 5000)
-
-      // Set up automatic reconnection
-      socket.io.on('reconnect_attempt', (attempt) => {
-        console.log(`Reconnection attempt ${attempt}`)
-      })
-
-      socket.io.on('error', (error) => {
-        console.error('Transport error:', error)
-      })
 
       return () => {
         clearInterval(healthInterval)
