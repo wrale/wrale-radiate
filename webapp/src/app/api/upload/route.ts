@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { Client } from '@minio/minio-js'
+import { Client } from 'minio'
 
 const minioClient = new Client({
   endPoint: process.env.MINIO_ENDPOINT || 'localhost',
