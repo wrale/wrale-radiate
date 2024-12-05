@@ -1,7 +1,7 @@
 import { Server as NetServer } from 'http'
 import { NextApiRequest, NextApiResponse } from 'next'
 import { Server as SocketIOServer } from 'socket.io'
-import { getSocketIO, config as socketConfig } from '@/lib/socket'
+import { getSocketIO } from '@/lib/socket'
 
 interface SocketServer extends NetServer {
   io?: SocketIOServer
