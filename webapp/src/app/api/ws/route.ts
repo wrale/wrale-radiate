@@ -1,31 +1,63 @@
-import { type NextRequest } from 'next/server';
-import { initWebSocket } from '@/lib/websocket';
+import { WebSocketServer } from 'ws';
+import { NextRequest } from 'next/server';
 
-export const dynamic = 'force-dynamic';
+let wss: WebSocketServer | null = null;
 
 export async function GET(req: NextRequest) {
-  if (req.headers.get('upgrade')?.toLowerCase() === 'websocket') {
-    try {
-      const response = new Response(null, {
-        status: 101,
-        headers: {
-          'Upgrade': 'websocket',
-          'Connection': 'Upgrade',
-        },
-      });
-
-      // Get raw response and initialize WebSocket
-      const res = response as any;
-      if (res.socket?.server) {
-        initWebSocket(res.socket.server);
-      }
-
-      return response;
-    } catch (err) {
-      console.error('WebSocket initialization error:', err);
-      return new Response('WebSocket initialization failed', { status: 500 });
-    }
+  // Handle WebSocket upgrade
+  if (req.headers.get('upgrade') !== 'websocket') {
+    return new Response('Expected Upgrade: websocket', { status: 426 });
   }
 
-  return new Response('Expected WebSocket upgrade', { status: 426 });
+  try {
+    // Create WebSocket server if it doesn't exist
+    if (!wss) {
+      wss = new WebSocketServer({ noServer: true });
+
+      wss.on('connection', (ws) => {
+        console.log('Client connected');
+        ws.send(JSON.stringify({ type: 'welcome', message: 'Connected to Wrale Radiate' }));
+
+        ws.on('message', (data) => {
+          try {
+            const message = JSON.parse(data.toString());
+            console.log('Received:', message);
+
+            // Broadcast to all clients
+            wss?.clients.forEach((client) => {
+              if (client !== ws && client.readyState === ws.OPEN) {
+                client.send(JSON.stringify({
+                  type: 'broadcast',
+                  message: message.message
+                }));
+              }
+            });
+          } catch (err) {
+            console.error('Error processing message:', err);
+          }
+        });
+
+        ws.on('close', () => {
+          console.log('Client disconnected');
+        });
+      });
+    }
+
+    // Create response for WebSocket upgrade
+    const response = new Response(null, {
+      status: 101,
+      headers: {
+        'Upgrade': 'websocket',
+        'Connection': 'Upgrade',
+        'Sec-WebSocket-Accept': req.headers.get('sec-websocket-key') || ''
+      }
+    });
+
+    return response;
+  } catch (err) {
+    console.error('WebSocket setup error:', err);
+    return new Response('WebSocket setup failed', { status: 500 });
+  }
 }
+
+export const dynamic = 'force-dynamic';
