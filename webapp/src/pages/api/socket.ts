@@ -2,6 +2,7 @@ import type { NextApiRequest, NextApiResponse } from 'next'
 import { Server as SocketIOServer } from 'socket.io'
 import type { Server as NetServer } from 'http'
 import type { Socket } from 'socket.io'
+import { parse } from 'url'
 
 export const config = {
   api: {
@@ -17,18 +18,30 @@ type NextApiResponseServerIO = NextApiResponse & {
   }
 }
 
-const ioHandler = (req: NextApiRequest, res: NextApiResponseServerIO) => {
+const ioHandler = async (req: NextApiRequest, res: NextApiResponseServerIO) => {
   if (!res.socket.server.io) {
-    console.log('Initializing Socket.IO...')
-    const io = new SocketIOServer(res.socket.server, {
+    console.log('Creating Socket.IO server...')
+
+    const io = new SocketIOServer({
       path: '/api/socket',
       addTrailingSlash: false,
       transports: ['websocket'],
       cors: {
         origin: '*',
-        methods: ['GET', 'POST'],
-        credentials: false,
       },
+    })
+
+    // Handle WebSocket upgrades
+    const server = res.socket.server
+    server.on('upgrade', (request, socket, head) => {
+      const pathname = parse(request.url || '').pathname || ''
+      
+      if (pathname.startsWith('/api/socket')) {
+        console.log('Handling WebSocket upgrade for:', pathname)
+        io.engine.handleUpgrade(request, socket, head)
+      } else {
+        socket.destroy()
+      }
     })
 
     io.on('connection', (socket: Socket) => {
@@ -50,13 +63,21 @@ const ioHandler = (req: NextApiRequest, res: NextApiResponseServerIO) => {
       })
     })
 
+    io.engine.on('initial_headers', (headers: any, req: any) => {
+      console.log('Setting initial headers for:', req.url)
+    })
+
+    io.engine.on('headers', (headers: any, req: any) => {
+      console.log('Setting headers for:', req.url)
+    })
+
     io.engine.on('connection_error', (err) => {
       console.error('Connection error:', err)
     })
 
     res.socket.server.io = io
   } else {
-    console.log('Socket.IO already running')
+    console.log('Socket.IO server already running')
   }
 
   res.end()
