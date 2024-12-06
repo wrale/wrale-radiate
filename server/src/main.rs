@@ -14,7 +14,7 @@ async fn main() {
         .init();
 
     // Initialize application
-    let app = app::create_app().await.into_make_service();
+    let app = app::create_app().into_make_service();
 
     // Run it
     let addr = SocketAddr::from(([0, 0, 0, 0], 3002));
