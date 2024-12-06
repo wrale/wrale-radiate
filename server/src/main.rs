@@ -11,7 +11,7 @@ use axum::{
 };
 use futures::{sink::SinkExt, stream::StreamExt};
 use tokio::sync::broadcast;
-use tower_http::cors::CorsLayer;
+use tower_http::cors::{CorsLayer, Any};
 use tracing_subscriber::fmt::format::FmtSpan;
 
 #[derive(Debug, Clone)]
@@ -37,14 +37,14 @@ async fn main() {
     };
 
     // Create the base router
+    let cors = CorsLayer::new()
+        .allow_origin(Any)
+        .allow_methods(vec![Method::GET]);
+
     let app = Router::new()
         .route("/ws", get(ws_handler))
-        .with_state(state)
-        .layer(
-            CorsLayer::new()
-                .allow_methods([Method::GET])
-                .allow_origin(tower_http::cors::Any)
-        );
+        .layer(cors)
+        .with_state(state);
 
     // Run it
     let addr = SocketAddr::from(([0, 0, 0, 0], 3001));
