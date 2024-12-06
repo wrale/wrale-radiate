@@ -13,7 +13,6 @@ use axum_extra::headers::{AccessControlAllowOrigin, HeaderMapExt};
 use futures::{sink::SinkExt, stream::StreamExt};
 use serde_json::Value;
 use tokio::sync::{broadcast, mpsc};
-use tower::ServiceBuilder;
 use tower_http::cors::CorsLayer;
 use tracing_subscriber::fmt::format::FmtSpan;
 
@@ -42,18 +41,17 @@ async fn main() {
         connected_clients: tokio::sync::Mutex::new(HashSet::new()),
     });
 
-    // Build our service stack
-    let service_stack = ServiceBuilder::new()
-        .layer(CorsLayer::permissive());
-
     // Create main router
     let app = Router::new()
         .route("/ws", get(ws_handler))
         .route("/health", get(health_check))
-        .with_state(state);
-        
-    // Apply service stack after router is built
-    let app = service_stack.service(app);
+        .with_state(state)
+        .layer(
+            CorsLayer::new()
+                .allow_methods([axum::http::Method::GET, axum::http::Method::POST])
+                .allow_origin(tower_http::cors::Any)
+                .allow_headers(tower_http::cors::Any)
+        );
 
     // Run it
     let addr = SocketAddr::from(([0, 0, 0, 0], 3002));
@@ -61,7 +59,7 @@ async fn main() {
     
     let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
     tracing::info!("server started on {}", addr);
-    axum::serve(listener, app).await.unwrap();
+    axum::serve(listener, app.into_make_service()).await.unwrap();
 }
 
 async fn health_check(
