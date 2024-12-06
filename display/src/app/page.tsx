@@ -1,9 +1,9 @@
-import { WSTest } from '../components/WSTest'
+import { DisplayClient } from '../components/DisplayClient'
 
 export default function Home() {
   return (
-    <main className="p-8">
-      <WSTest />
+    <main className="p-0">
+      <DisplayClient />
     </main>
   )
 }
