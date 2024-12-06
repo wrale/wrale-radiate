@@ -7,8 +7,6 @@ use axum::{
     response::IntoResponse,
     routing::get,
     Router,
-    http::Method,
-    error_handling::HandleErrorLayer,
 };
 use futures::{sink::SinkExt, stream::StreamExt};
 use tokio::sync::broadcast;
@@ -44,13 +42,7 @@ async fn main() {
     let app = Router::new()
         .route("/ws", get(ws_handler))
         .with_state(state)
-        .layer(
-            tower::ServiceBuilder::new()
-                .layer(HandleErrorLayer::new(handle_error))
-                .layer(
-                    CorsLayer::permissive()
-                )
-        );
+        .layer(CorsLayer::permissive());
 
     // Run it
     let addr = SocketAddr::from(([0, 0, 0, 0], 3001));
@@ -59,10 +51,6 @@ async fn main() {
     let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
     tracing::info!("server started on {}", addr);
     axum::serve(listener, app).await.unwrap();
-}
-
-async fn handle_error(error: axum::BoxError) -> impl IntoResponse {
-    (axum::http::StatusCode::INTERNAL_SERVER_ERROR, format!("{}", error))
 }
 
 async fn ws_handler(
