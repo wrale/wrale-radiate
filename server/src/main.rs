@@ -4,13 +4,13 @@ use std::net::SocketAddr;
 
 use axum::{
     extract::ws::{Message, WebSocket, WebSocketUpgrade},
-    response::IntoResponse,
+    response::{IntoResponse, Response},
     routing::get,
     Router,
 };
+use axum_extra::headers::{AccessControlAllowOrigin, HeaderMapExt};
 use futures::{sink::SinkExt, stream::StreamExt};
 use tokio::sync::broadcast;
-use tower_http::cors::CorsLayer;
 use tracing_subscriber::fmt::format::FmtSpan;
 
 // Add middleware stack type
@@ -41,8 +41,7 @@ async fn main() {
     // Build our application
     let app = Router::new()
         .route("/ws", get(ws_handler))
-        .with_state(state)
-        .layer(CorsLayer::permissive());
+        .with_state(state);
 
     // Run it
     let addr = SocketAddr::from(([0, 0, 0, 0], 3001));
@@ -56,8 +55,14 @@ async fn main() {
 async fn ws_handler(
     ws: WebSocketUpgrade,
     axum::extract::State(state): axum::extract::State<SharedState>,
-) -> impl IntoResponse {
-    ws.on_upgrade(|socket| handle_socket(socket, state))
+) -> Response {
+    // Add CORS headers directly to the response
+    let mut response = ws
+        .on_upgrade(|socket| handle_socket(socket, state))
+        .into_response();
+        
+    response.headers_mut().typed_insert(AccessControlAllowOrigin::ANY);
+    response
 }
 
 async fn handle_socket(socket: WebSocket, state: SharedState) {
