@@ -12,19 +12,20 @@ pub async fn create_app() -> Router {
     // Configure CORS at the router level
     let cors = CorsLayer::new()
         // Allow standard methods
-        .allow_methods([Method::GET, Method::POST, Method::OPTIONS])
+        .allow_methods(vec![Method::GET, Method::POST, Method::OPTIONS])
         // Allow standard headers
-        .allow_headers([header::CONTENT_TYPE, header::ACCEPT, header::ORIGIN])
+        .allow_headers(vec![header::CONTENT_TYPE, header::ACCEPT, header::ORIGIN])
         // Allow requests from any origin
         .allow_origin(tower_http::cors::Any)
         // Allow credentials
         .allow_credentials(true);
 
-    let app = Router::new()
+    // Create base router
+    let router = Router::new()
         .route("/ws", get(ws::handler))
         .route("/health", get(health::handler))
         .with_state(state);
 
-    // Apply CORS after routes are defined
-    app.layer(cors)
+    // Apply CORS to router
+    router.layer(cors)
 }
