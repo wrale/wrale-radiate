@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server'
 import { Client } from 'minio'
-import type { WebSocketMessage } from '@/lib/types'
 
 const minioEndpoint = process.env.MINIO_ENDPOINT || 'localhost'
 const minioPort = parseInt(process.env.MINIO_PORT || '9000')
@@ -35,7 +34,10 @@ async function ensureBucket() {
   }
 }
 
-async function downloadAndStore(url: string): Promise<string> {
+async function downloadAndStore(url: string): Promise<{
+  url: string
+  objectName: string
+}> {
   // Basic URL validation
   const urlObj = new URL(url)
   const pathname = urlObj.pathname.toLowerCase()
@@ -47,10 +49,10 @@ async function downloadAndStore(url: string): Promise<string> {
 
   // Make the initial request
   const response = await fetch(url, {
-    redirect: 'follow',     // Follow redirects automatically
+    redirect: 'follow',
     headers: {
-      'Accept': 'video/*',  // Request video content
-      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'  // Pretend to be a browser
+      'Accept': 'video/*',
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
     }
   })
 
@@ -67,11 +69,9 @@ async function downloadAndStore(url: string): Promise<string> {
     throw new Error('Received HTML page instead of video file. Please provide direct video URL.')
   }
 
-  // Log headers for debugging
-  console.log('Response headers:', Object.fromEntries(response.headers.entries()))
-
   // Generate object name from URL
-  const objectName = `${Date.now()}-${url.split('/').pop()}`
+  const timestamp = Date.now()
+  const objectName = `${timestamp}-${url.split('/').pop()}`
 
   // Read the response as an array buffer
   const chunks: Uint8Array[] = []
@@ -87,10 +87,9 @@ async function downloadAndStore(url: string): Promise<string> {
     if (done) break
     totalSize += value.length
     chunks.push(value)
-    console.log(`Downloaded ${totalSize} bytes`) // Progress logging
+    console.log(`Downloaded ${totalSize} bytes`)
   }
 
-  console.log('Total size:', totalSize) // Debug log
   const buffer = Buffer.concat(chunks)
 
   // Verify we got actual video content (check first few bytes for video file signatures)
@@ -110,12 +109,18 @@ async function downloadAndStore(url: string): Promise<string> {
   )
 
   // Get temporary URL for the object
-  const presignedUrl = await minioClient.presignedGetObject(bucketName, objectName, 24*60*60) // 24 hour expiry
+  const presignedUrl = await minioClient.presignedGetObject(bucketName, objectName, 24*60*60)
   
-  return presignedUrl
+  return {
+    url: presignedUrl,
+    objectName
+  }
 }
 
-async function storeFile(formData: FormData): Promise<string> {
+async function storeFile(formData: FormData): Promise<{
+  url: string
+  objectName: string
+}> {
   const file = formData.get('file') as File
   if (!file) {
     throw new Error('No file provided')
@@ -131,7 +136,8 @@ async function storeFile(formData: FormData): Promise<string> {
   const buffer = Buffer.from(await file.arrayBuffer())
 
   // Generate unique object name
-  const objectName = `${Date.now()}-${file.name}`
+  const timestamp = Date.now()
+  const objectName = `${timestamp}-${file.name}`
 
   // Upload to MinIO
   await minioClient.putObject(
@@ -142,35 +148,39 @@ async function storeFile(formData: FormData): Promise<string> {
   )
 
   // Get temporary URL for the object
-  return await minioClient.presignedGetObject(bucketName, objectName, 24*60*60) // 24 hour expiry
+  const presignedUrl = await minioClient.presignedGetObject(bucketName, objectName, 24*60*60)
+
+  return {
+    url: presignedUrl,
+    objectName
+  }
 }
 
 export async function POST(request: Request) {
   try {
     await ensureBucket()
 
-    let storedUrl: string
+    let result: { url: string, objectName: string }
     const contentType = request.headers.get('content-type') || ''
 
     if (contentType.includes('multipart/form-data')) {
       // Handle file upload
       const formData = await request.formData()
-      storedUrl = await storeFile(formData)
+      result = await storeFile(formData)
     } else {
       // Handle URL upload
       const data = await request.json()
       if (!data.url) {
         return NextResponse.json({ error: 'URL required' }, { status: 400 })
       }
-      storedUrl = await downloadAndStore(data.url)
+      result = await downloadAndStore(data.url)
     }
 
-    const playMessage: WebSocketMessage = {
-      type: 'play',
-      url: storedUrl
-    }
-
-    return NextResponse.json({ success: true, message: playMessage })
+    return NextResponse.json({
+      success: true,
+      url: result.url,
+      contentId: result.objectName
+    })
   } catch (error) {
     console.error('Upload error:', error)
     return NextResponse.json({ 
