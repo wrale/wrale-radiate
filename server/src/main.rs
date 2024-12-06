@@ -45,8 +45,8 @@ async fn main() {
         .route("/health", get(health_check))
         .with_state(state);
 
-    // Run it
-    let addr = SocketAddr::from(([0, 0, 0, 0], 3001));
+    // Run it on port 3002
+    let addr = SocketAddr::from(([0, 0, 0, 0], 3002));
     tracing::info!("listening on {}", addr);
     
     let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
