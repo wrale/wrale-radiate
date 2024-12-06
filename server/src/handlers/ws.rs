@@ -1,12 +1,9 @@
 use axum::{
-    extract::ws::{Message, WebSocket, WebSocketUpgrade},
+    extract::ws::WebSocketUpgrade,
     response::{IntoResponse, Response},
     http::HeaderValue,
 };
 use axum_extra::headers::{AccessControlAllowOrigin, HeaderMapExt};
-use futures::{sink::SinkExt, stream::StreamExt};
-use serde_json::Value;
-use tokio::sync::mpsc;
 
 use crate::state::AppState;
 use crate::websocket::handle_socket;
