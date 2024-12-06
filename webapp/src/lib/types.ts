@@ -1,14 +1,16 @@
-export interface DisplayHealthMessage {
+export interface HealthUpdate {
   type: 'health'
-  status: 'connecting' | 'ready' | 'playing'
   displayId: string
-  currentTime?: number
-  duration?: number
+  status: 'playing' | 'ready' | 'error'
+  contentId?: string
+  error?: string
+  timestamp?: number
 }
 
-export interface PlayMessage {
+export interface PlayCommand {
   type: 'play'
   url: string
+  contentId: string
 }
 
-export type WebSocketMessage = DisplayHealthMessage | PlayMessage
+export type WebSocketMessage = HealthUpdate | PlayCommand
