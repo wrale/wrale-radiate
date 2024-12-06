@@ -10,8 +10,9 @@ use axum::{
 };
 use futures::{sink::SinkExt, stream::StreamExt};
 use tokio::sync::broadcast;
-use tower_http::cors::CorsLayer;
+use tower_http::cors::{CorsLayer, Any};
 use tracing_subscriber::fmt::format::FmtSpan;
+use http::Method;
 
 #[derive(Debug, Clone)]
 struct AppState {
@@ -35,10 +36,18 @@ async fn main() {
         connected_clients: Arc::new(tokio::sync::Mutex::new(HashSet::new())),
     };
 
-    // Build our application with a route
-    let app = Router::new()
-        .route("/ws", get(ws_handler))
-        .layer(CorsLayer::permissive())
+    // Build CORS layer
+    let cors = CorsLayer::new()
+        .allow_methods([Method::GET, Method::POST])
+        .allow_origin(Any)
+        .allow_headers(Any);
+
+    // Create the route first
+    let routes = Router::new().route("/ws", get(ws_handler));
+
+    // Then apply CORS and state
+    let app = routes
+        .layer(cors)
         .with_state(state);
 
     // Run it
