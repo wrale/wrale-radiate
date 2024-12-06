@@ -1,15 +1,13 @@
 use std::collections::HashSet;
 use std::sync::Arc;
 use std::net::SocketAddr;
-use std::time::Duration;
 
 use axum::{
     extract::ws::{Message, WebSocket, WebSocketUpgrade},
     response::{IntoResponse, Response},
     routing::get,
     Json, Router,
-    http::{HeaderValue, Method},
-    error_handling::HandleErrorLayer,
+    http::HeaderValue,
 };
 use axum_extra::headers::{AccessControlAllowOrigin, HeaderMapExt};
 use futures::{sink::SinkExt, stream::StreamExt};
@@ -17,7 +15,6 @@ use serde_json::Value;
 use tokio::sync::{broadcast, mpsc};
 use tower_http::cors::CorsLayer;
 use tracing_subscriber::fmt::format::FmtSpan;
-use tower::ServiceBuilder;
 
 // Add middleware stack type
 type SharedState = Arc<AppState>;
@@ -44,20 +41,12 @@ async fn main() {
         connected_clients: tokio::sync::Mutex::new(HashSet::new()),
     });
 
-    // Create the CORS layer
-    let cors = CorsLayer::very_permissive();
-
-    // Build middleware stack
-    let middleware = ServiceBuilder::new()
-        .layer(HandleErrorLayer::new(|_| async { }))
-        .layer(cors);
-
     // Build our application
     let app = Router::new()
         .route("/ws", get(ws_handler))
         .route("/health", get(health_check))
         .with_state(state)
-        .layer(middleware);
+        .layer(CorsLayer::permissive());
 
     // Run it
     let addr = SocketAddr::from(([0, 0, 0, 0], 3002));
