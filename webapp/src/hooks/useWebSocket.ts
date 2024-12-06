@@ -21,10 +21,12 @@ export function useWebSocket(config: WebSocketConfig) {
     }
 
     try {
-      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-      const wsUrl = `${protocol}//${window.location.hostname}:3002/ws`;
-      console.log(`Connecting to WebSocket (attempt ${retryCount + 1}):`, wsUrl);
+      const wsUrl = process.env.NEXT_PUBLIC_WS_URL;
+      if (!wsUrl) {
+        throw new Error('WebSocket URL not configured');
+      }
 
+      console.log(`Connecting to WebSocket (attempt ${retryCount + 1}):`, wsUrl);
       const ws = new WebSocket(wsUrl);
       wsRef.current = ws;
 
