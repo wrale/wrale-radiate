@@ -1,6 +1,7 @@
 use std::collections::HashSet;
 use std::sync::Arc;
 use std::net::SocketAddr;
+use std::time::Duration;
 
 use axum::{
     extract::ws::{Message, WebSocket, WebSocketUpgrade},
@@ -13,7 +14,7 @@ use axum_extra::headers::{AccessControlAllowOrigin, HeaderMapExt};
 use futures::{sink::SinkExt, stream::StreamExt};
 use serde_json::Value;
 use tokio::sync::{broadcast, mpsc};
-use tower_http::cors::CorsLayer;
+use tower_http::cors::{Any, CorsLayer};
 use tracing_subscriber::fmt::format::FmtSpan;
 
 // Add middleware stack type
@@ -43,11 +44,10 @@ async fn main() {
 
     // Configure CORS
     let cors = CorsLayer::new()
-        .allow_methods(vec![Method::GET, Method::POST])
-        .allow_headers(tower_http::cors::Any)
-        .allow_origin(tower_http::cors::Any)
-        .allow_credentials(true)
-        .max_age(3600);
+        .allow_origin(Any)
+        .allow_methods(Any)
+        .allow_headers(Any)
+        .max_age(Duration::from_secs(3600));
 
     // Build our application
     let app = Router::new()
