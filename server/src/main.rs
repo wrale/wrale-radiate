@@ -43,7 +43,7 @@ async fn main() {
 
     // Configure CORS
     let cors = CorsLayer::new()
-        .allow_methods(vec![Method::GET, Method::POST])
+        .allow_methods([Method::GET, Method::POST])
         .allow_headers(tower_http::cors::Any)
         .allow_origin(tower_http::cors::Any)
         .expose_headers(tower_http::cors::Any);
@@ -127,108 +127,77 @@ async fn handle_socket(socket: WebSocket, state: SharedState) {
         let _ = tx_socket.send(Message::Text(msg)).await;
     }
 
-    // Start sender task
-    let send_task = tokio::spawn(async move {
-        while let Some(message) = rx_socket.recv().await {
-            if let Err(e) = sender.send(message).await {
-                tracing::error!("Error sending message: {}", e);
-                break;
-            }
-        }
-    });
-
-    // Start heartbeat task
-    let tx_socket_heartbeat = tx_socket.clone();
-    let client_id_heartbeat = client_id.clone();
-    let heartbeat_task = tokio::spawn(async move {
-        let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(30));
-        loop {
-            interval.tick().await;
-            if let Err(e) = tx_socket_heartbeat.send(Message::Ping(vec![])).await {
-                tracing::error!("Error sending ping to {}: {}", client_id_heartbeat, e);
-                break;
-            }
-        }
-    });
-
-    // Start broadcast listener task
-    let tx_socket_broadcast = tx_socket.clone();
-    let broadcast_task = tokio::spawn(async move {
-        while let Ok(msg) = rx.recv().await {
-            if let Err(e) = tx_socket_broadcast.send(Message::Text(msg)).await {
-                tracing::error!("Error forwarding broadcast: {}", e);
-                break;
-            }
-        }
-    });
-
-    // Handle messages from client
+    // Start all tasks using a single select!
     let tx = state.tx.clone();
+    let tx_socket_send = tx_socket.clone();
     let client_id_clone = client_id.clone();
-    let tx_socket_recv = tx_socket.clone();
-    let mut recv_task = tokio::spawn(async move {
-        while let Some(Ok(msg)) = receiver.next().await {
-            match msg {
-                Message::Text(text) => {
-                    match serde_json::from_str::<Value>(&text) {
-                        Ok(msg) => {
-                            // Add client_id to health updates
-                            let msg = if msg["type"] == "health" {
-                                let mut msg = msg.as_object().unwrap().clone();
-                                msg.insert("displayId".to_string(), client_id_clone.clone().into());
-                                serde_json::to_string(&msg)
-                            } else {
-                                Ok(text)
-                            };
 
-                            if let Ok(msg) = msg {
-                                if let Err(e) = tx.send(msg) {
-                                    tracing::error!("Error broadcasting message: {}", e);
-                                    break;
+    let mut tasks_complete = false;
+    while !tasks_complete {
+        tokio::select! {
+            // Handle incoming messages from client
+            msg = receiver.next() => {
+                match msg {
+                    Some(Ok(msg)) => {
+                        match msg {
+                            Message::Text(text) => {
+                                match serde_json::from_str::<Value>(&text) {
+                                    Ok(msg) => {
+                                        // Add client_id to health updates
+                                        let msg = if msg["type"] == "health" {
+                                            let mut msg = msg.as_object().unwrap().clone();
+                                            msg.insert("displayId".to_string(), client_id_clone.clone().into());
+                                            serde_json::to_string(&msg)
+                                        } else {
+                                            Ok(text)
+                                        };
+
+                                        if let Ok(msg) = msg {
+                                            let _ = tx.send(msg);
+                                        }
+                                    }
+                                    Err(e) => {
+                                        tracing::error!("Error parsing message: {}", e);
+                                    }
                                 }
                             }
-                        }
-                        Err(e) => {
-                            tracing::error!("Error parsing message: {}", e);
-                            continue;
+                            Message::Ping(data) => {
+                                let _ = tx_socket_send.send(Message::Pong(data)).await;
+                            }
+                            Message::Close(_) => {
+                                tasks_complete = true;
+                            }
+                            _ => {}
                         }
                     }
-                }
-                Message::Ping(data) => {
-                    if let Err(e) = tx_socket_recv.send(Message::Pong(data)).await {
-                        tracing::error!("Error sending pong: {}", e);
-                        break;
+                    _ => {
+                        tasks_complete = true;
                     }
                 }
-                Message::Close(_) => break,
-                _ => {}
+            }
+            // Handle outgoing messages to client
+            Some(msg) = rx_socket.recv() => {
+                if let Err(e) = sender.send(msg).await {
+                    tracing::error!("Error sending message: {}", e);
+                    tasks_complete = true;
+                }
+            }
+            // Handle broadcast messages
+            Ok(msg) = rx.recv() => {
+                if let Err(e) = tx_socket_send.send(Message::Text(msg)).await {
+                    tracing::error!("Error forwarding broadcast: {}", e);
+                    tasks_complete = true;
+                }
+            }
+            // Send periodic heartbeat
+            _ = tokio::time::sleep(tokio::time::Duration::from_secs(30)) => {
+                if let Err(e) = tx_socket_send.send(Message::Ping(vec![])).await {
+                    tracing::error!("Error sending ping: {}", e);
+                    tasks_complete = true;
+                }
             }
         }
-    });
-
-    // Wait for any task to finish
-    tokio::select! {
-        _ = send_task => {
-            recv_task.abort();
-            broadcast_task.abort();
-            heartbeat_task.abort();
-        },
-        _ = recv_task => {
-            send_task.abort();
-            broadcast_task.abort();
-            heartbeat_task.abort();
-        },
-        _ = broadcast_task => {
-            send_task.abort();
-            recv_task.abort();
-            heartbeat_task.abort();
-        },
-        _ = heartbeat_task => {
-            send_task.abort();
-            recv_task.abort();
-            broadcast_task.abort();
-        }
-    };
+    }
 
     // Remove client from connected set
     {
