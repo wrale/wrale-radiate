@@ -13,7 +13,7 @@ use axum_extra::headers::{AccessControlAllowOrigin, HeaderMapExt};
 use futures::{sink::SinkExt, stream::StreamExt};
 use serde_json::Value;
 use tokio::sync::{broadcast, mpsc};
-use tower_http::cors::CorsLayer;
+use tower_http::cors::{CorsLayer, Any};
 use tracing_subscriber::fmt::format::FmtSpan;
 
 // Add middleware stack type
@@ -41,17 +41,22 @@ async fn main() {
         connected_clients: tokio::sync::Mutex::new(HashSet::new()),
     });
 
-    // Create main router
+    // Create routes first
     let app = Router::new()
         .route("/ws", get(ws_handler))
         .route("/health", get(health_check))
         .with_state(state)
         .layer(
             CorsLayer::new()
-                .allow_methods([axum::http::Method::GET, axum::http::Method::POST])
-                .allow_origin(tower_http::cors::Any)
-                .allow_headers(tower_http::cors::Any)
-        );
+                // Allow all origins
+                .allow_origin(Any)
+                // React/Next.js sends `application/json`
+                .allow_headers(Any)
+                // Allow any method
+                .allow_methods(Any),
+        )
+        // This is the key - transform to make_service after applying CORS
+        .into_make_service();
 
     // Run it
     let addr = SocketAddr::from(([0, 0, 0, 0], 3002));
@@ -59,7 +64,7 @@ async fn main() {
     
     let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
     tracing::info!("server started on {}", addr);
-    axum::serve(listener, app.into_make_service()).await.unwrap();
+    axum::serve(listener, app).await.unwrap();
 }
 
 async fn health_check(
