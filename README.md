@@ -35,6 +35,61 @@ The implementation demonstrates four core capabilities:
    - Content playback verification
    - Connection status monitoring
 
+## Architecture
+
+```mermaid
+graph TB
+    W[Management WebApp<br>:3000] -->|1. Upload & Get URLs| M[MinIO<br>:9000]
+    W -->|2. Send Play Signal| RW[Rust WebSocket Server<br>:3002]
+    D[Display Client<br>:3001] -->|3. WebSocket Control| RW
+    D -->|4. Direct Content Access| M
+    
+    subgraph "Signal Flow"
+        RW -->|Play Commands| D
+        D -->|Health Updates| RW
+        RW -->|Health Status| W
+    end
+
+    subgraph "Content Flow"
+        W -->|Store Content| M
+        D -.->|Fetch Content| M
+    end
+
+    classDef service fill:#f9f,stroke:#333,stroke-width:2px
+    classDef flow fill:#fff,stroke:#333,stroke-width:1px
+    
+    class W,D,RW,M service
+    class Signal_Flow,Content_Flow flow
+```
+
+### Technology Stack
+- Frontend: TypeScript/Next.js 14
+- Storage: MinIO
+- Real-time: WebSocket (Rust-based server)
+- Deployment: Docker/Podman Compose
+
+### Components
+
+1. Management Interface (Port 3000)
+   - Content upload and management
+   - Display health monitoring
+   - Real-time status dashboard
+
+2. Display Client (Port 3001)
+   - Video playback simulation
+   - Health reporting
+   - WebSocket connectivity
+
+3. Storage Layer
+   - MinIO object storage (Port 9000/9001)
+   - Local volume persistence
+   - Content lifecycle management
+
+4. WebSocket Server (Port 3002)
+   - Rust-based real-time messaging
+   - Play command distribution
+   - Health status aggregation
+
 ## Getting Started
 
 ### Prerequisites
@@ -76,31 +131,6 @@ make shell-display
 make down     # Stop services
 make clean    # Full cleanup
 ```
-
-## Architecture
-
-### Technology Stack
-- Frontend: TypeScript/Next.js 14
-- Storage: MinIO
-- Real-time: WebSocket
-- Deployment: Docker/Podman Compose
-
-### Components
-
-1. Management Interface (Port 3000)
-   - Content upload and management
-   - Display health monitoring
-   - Real-time status dashboard
-
-2. Display Client (Port 3001)
-   - Video playback simulation
-   - Health reporting
-   - WebSocket connectivity
-
-3. Storage Layer
-   - MinIO object storage (Port 9000/9001)
-   - Local volume persistence
-   - Content lifecycle management
 
 ## Documentation
 
