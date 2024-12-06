@@ -8,12 +8,13 @@ use axum::{
     routing::get,
     Json, Router,
     http::HeaderValue,
+    middleware,
 };
 use axum_extra::headers::{AccessControlAllowOrigin, HeaderMapExt};
 use futures::{sink::SinkExt, stream::StreamExt};
 use serde_json::Value;
 use tokio::sync::{broadcast, mpsc};
-use tower_http::cors::{CorsLayer, Any};
+use tower_http::cors::{Any, CorsLayer};
 use tracing_subscriber::fmt::format::FmtSpan;
 
 // Add middleware stack type
@@ -41,22 +42,27 @@ async fn main() {
         connected_clients: tokio::sync::Mutex::new(HashSet::new()),
     });
 
-    // Create routes first
+    // Create CORS middleware
+    let cors = CorsLayer::new()
+        .allow_methods(Any)
+        .allow_headers(Any)
+        .allow_origin(Any);
+
+    // Build our application
     let app = Router::new()
         .route("/ws", get(ws_handler))
         .route("/health", get(health_check))
         .with_state(state)
-        .layer(
-            CorsLayer::new()
-                // Allow all origins
-                .allow_origin(Any)
-                // React/Next.js sends `application/json`
-                .allow_headers(Any)
-                // Allow any method
-                .allow_methods(Any),
-        )
-        // This is the key - transform to make_service after applying CORS
-        .into_make_service();
+        // Add trace layer first
+        .layer(tower_http::trace::TraceLayer::new_for_http())
+        // Then add CORS as middleware
+        .route_layer(middleware::from_fn(move |req, next| {
+            let cors = cors.clone();
+            async move {
+                let layer = cors.layer(next);
+                layer.call(req).await
+            }
+        }));
 
     // Run it
     let addr = SocketAddr::from(([0, 0, 0, 0], 3002));
@@ -64,7 +70,7 @@ async fn main() {
     
     let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
     tracing::info!("server started on {}", addr);
-    axum::serve(listener, app).await.unwrap();
+    axum::serve(listener, app.into_make_service()).await.unwrap();
 }
 
 async fn health_check(
