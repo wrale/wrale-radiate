@@ -43,10 +43,11 @@ async fn main() {
 
     // Configure CORS
     let cors = CorsLayer::new()
-        .allow_methods([Method::GET, Method::POST])
+        .allow_methods(vec![Method::GET, Method::POST])
         .allow_headers(tower_http::cors::Any)
         .allow_origin(tower_http::cors::Any)
-        .expose_headers(tower_http::cors::Any);
+        .allow_credentials(true)
+        .max_age(3600);
 
     // Build our application
     let app = Router::new()
