@@ -119,6 +119,7 @@ async fn handle_socket(socket: WebSocket, state: SharedState) {
 
     // Handle messages from client
     let tx = state.tx.clone();
+    let client_id_clone = client_id.clone(); // Clone for the task
     let mut recv_task = tokio::spawn(async move {
         while let Some(Ok(Message::Text(text))) = receiver.next().await {
             match serde_json::from_str::<Value>(&text) {
@@ -126,7 +127,7 @@ async fn handle_socket(socket: WebSocket, state: SharedState) {
                     // Add client_id to health updates
                     let msg = if msg["type"] == "health" {
                         let mut msg = msg.as_object().unwrap().clone();
-                        msg.insert("displayId".to_string(), client_id.clone().into());
+                        msg.insert("displayId".to_string(), client_id_clone.clone().into());
                         serde_json::to_string(&msg)
                     } else {
                         Ok(text)
