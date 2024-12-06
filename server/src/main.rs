@@ -8,14 +8,16 @@ use axum::{
     response::{IntoResponse, Response},
     routing::get,
     Json, Router,
-    http::HeaderValue,
+    http::{HeaderValue, Method},
+    error_handling::HandleErrorLayer,
 };
 use axum_extra::headers::{AccessControlAllowOrigin, HeaderMapExt};
 use futures::{sink::SinkExt, stream::StreamExt};
 use serde_json::Value;
 use tokio::sync::{broadcast, mpsc};
-use tower_http::cors::{Any, CorsLayer};
+use tower_http::cors::CorsLayer;
 use tracing_subscriber::fmt::format::FmtSpan;
+use tower::ServiceBuilder;
 
 // Add middleware stack type
 type SharedState = Arc<AppState>;
@@ -42,19 +44,20 @@ async fn main() {
         connected_clients: tokio::sync::Mutex::new(HashSet::new()),
     });
 
-    // Build our application with WebSocket and health routes
+    // Create the CORS layer
+    let cors = CorsLayer::very_permissive();
+
+    // Build middleware stack
+    let middleware = ServiceBuilder::new()
+        .layer(HandleErrorLayer::new(|_| async { }))
+        .layer(cors);
+
+    // Build our application
     let app = Router::new()
         .route("/ws", get(ws_handler))
         .route("/health", get(health_check))
         .with_state(state)
-        // Add CORS support as the final layer
-        .layer(
-            CorsLayer::new()
-                .allow_origin(Any)
-                .allow_methods(Any)
-                .allow_headers(Any)
-                .max_age(Duration::from_secs(3600))
-        );
+        .layer(middleware);
 
     // Run it
     let addr = SocketAddr::from(([0, 0, 0, 0], 3002));
