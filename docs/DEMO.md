@@ -2,13 +2,32 @@
 
 This guide walks through demonstrating the steel thread implementation of Wrale Radiate.
 
-## Steel Thread Components
+## Architecture
 
-The demo showcases four core capabilities:
-1. Content Management (MKTG_CONTENT_MGMT)
-2. Content Transport (CAP_CONTENT_TRANSPORT)
-3. Basic Rendering (CAP_BASIC_RENDER)
-4. Health Monitoring (CAP_DISPLAY_HEALTH)
+```mermaid
+graph TB
+    W[Management WebApp<br>:3000] -->|1. Upload & Get URLs| M[MinIO<br>:9000]
+    W -->|2. Send Play Signal| RW[Rust WebSocket Server<br>:3002]
+    D[Display Client<br>:3001] -->|3. WebSocket Control| RW
+    D -->|4. Direct Content Access| M
+    
+    subgraph "Signal Flow"
+        RW -->|Play Commands| D
+        D -->|Health Updates| RW
+        RW -->|Health Status| W
+    end
+
+    subgraph "Content Flow"
+        W -->|Store Content| M
+        D -.->|Fetch Content| M
+    end
+
+    classDef service fill:#f9f,stroke:#333,stroke-width:2px
+    classDef flow fill:#fff,stroke:#333,stroke-width:1px
+    
+    class W,D,RW,M service
+    class Signal_Flow,Content_Flow flow
+```
 
 ## Quick Start
 
@@ -32,7 +51,7 @@ The demo showcases four core capabilities:
 
 ## Demo Walkthrough
 
-### 1. Content Management (MKTG_CONTENT_MGMT)
+### 1. Content Management
 
 The management interface (http://localhost:3000) provides two ways to add content:
 
@@ -43,55 +62,61 @@ The management interface (http://localhost:3000) provides two ways to add conten
    https://file-examples.com/wp-content/storage/2017/04/file_example_MP4_1920_18MG.mp4
    ```
 3. Click "Process URL"
-4. Watch for the upload confirmation
+4. Watch content status:
+   - Upload progress
+   - MinIO storage (viewable in console)
+   - WebSocket connection status
 
 #### Option B: File Upload
 1. Click "Upload File" in the content management section
 2. Either:
    - Download the sample video above and upload it, or
    - Use any H.264-encoded MP4 file
-3. Select the file and watch for upload confirmation
+3. Watch upload and distribution progress
 
-Both methods will store the content in MinIO (viewable in MinIO console)
+### 2. Display Client
 
-### 2. Content Transport (CAP_CONTENT_TRANSPORT)
-- System automatically:
-  - Generates temporary URL for the content
-  - Broadcasts URL via WebSocket
-  - Manages delivery to connected displays
-- View transport activity in `make webapp-logs`
+Connect displays by opening the display simulator (http://localhost:3001). Each tab represents a unique display.
 
-### 3. Basic Rendering (CAP_BASIC_RENDER)
-- Open the display simulator (http://localhost:3001)
-- Observe automatic video playback when content arrives
-- Video plays using H.264 codec
-- Status reporting happens in background
+Display States:
+- Ready: Connected, waiting for content
+- Playing: Currently playing video
+- Error: Problem with playback or connection
 
-### 4. Health Monitoring (CAP_DISPLAY_HEALTH)
-- Watch the Health Dashboard in management interface
-- Shows:
-  - Display connection status
-  - Real-time status updates
-  - Last update timestamps
+Features:
+- Automatic WebSocket reconnection
+- Direct MinIO content access
+- Real-time health reporting
 
-## Testing Multiple Displays
+### 3. Health Monitoring
 
-1. Open multiple display simulator tabs (http://localhost:3001)
-2. Each tab simulates a separate display
-3. Upload content (via URL or file) to see synchronized delivery
-4. Watch health dashboard track all displays
+The Health Dashboard shows:
+- Connection status for each display
+- Current content being played
+- Last update time
+- Error states and messages
 
-## Key Development Commands
+To test:
+1. Open multiple display tabs
+2. Upload new content
+3. Observe synchronized playback
+4. Try disconnecting/reconnecting displays
 
+## Common Operations
+
+### Viewing Logs
 ```bash
-# View all service logs
+# All services
 make logs
 
-# View specific logs
-make webapp-logs
-make display-logs
+# Specific components
+make webapp-logs     # Management interface
+make display-logs    # Display simulator
+```
 
-# Container shells
+### Container Management
+```bash
+# Access service shells
 make shell-webapp
 make shell-display
 
@@ -106,27 +131,28 @@ make clean
 
 ### System Health
 - Check service status: `make ps`
-- View specific logs: `make webapp-logs` or `make display-logs`
 - Verify MinIO console access: http://localhost:9001
+- Check Rust WebSocket server: http://localhost:3002/health
 
 ### Common Issues
 
-1. Upload failures
-   - Direct URL:
-     - Check if URL is accessible
-     - Verify it's a direct link to an MP4 file
-     - Check webapp logs for download errors
-   - File Upload:
-     - Verify file is H.264 encoded
-     - Check file size (should be under 100MB for demo)
-     - Check MinIO connectivity
+1. Upload Failures
+   - Check file type (must be H.264 MP4)
+   - Verify direct video URL (no redirects)
+   - Check file size (<100MB for demo)
+   - Verify MinIO connection in webapp logs
 
-2. Display connection issues
-   - Verify WebSocket connection in browser console
-   - Check display client logs
-   - Restart display client if needed
+2. Display Issues
+   - Check WebSocket connection (browser console)
+   - Verify MinIO URL accessibility
+   - Check for codec compatibility
+   - Try refreshing display tab
 
-3. Playback issues
-   - Verify video codec is H.264
-   - Check browser console for player errors
-   - Verify content URL is accessible
+3. Connection Problems
+   - Verify all ports are accessible:
+     - 3000: Management webapp
+     - 3001: Display client
+     - 3002: WebSocket server
+     - 9000/9001: MinIO
+   - Check for connection errors in logs
+   - Verify no firewall blocking
