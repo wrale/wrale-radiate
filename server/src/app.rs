@@ -1,8 +1,7 @@
 use axum::Router;
 use axum::routing::get;
-use axum::handler::Handler;
-use axum::http::Method;
-use tower_http::cors::{Any, CorsLayer};
+use axum::response::IntoResponse;
+use tower_http::cors::CorsLayer;
 
 use crate::handlers::{health, ws};
 use crate::state::AppState;
@@ -10,22 +9,22 @@ use crate::state::AppState;
 pub fn create_app() -> Router {
     let state = AppState::new();
 
-    // Create our CORS-enabled router
     Router::new()
         .route("/ws", get(ws::handler))
         .route("/health", get(health::handler))
         .with_state(state)
-        // Fallback route that always applies CORS
-        .fallback(cors_handler.into_service())
+        .fallback(handle_cors_preflight)
 }
 
-// CORS handler for fallback routes
-async fn cors_handler() -> impl axum::response::IntoResponse {
-    let cors = CorsLayer::new()
-        .allow_origin(Any)
-        .allow_methods(Any)
-        .allow_headers(Any);
-        
-    // Return response with CORS headers
-    axum::http::StatusCode::OK
+/// Handler for CORS preflight requests and 404s
+async fn handle_cors_preflight() -> impl IntoResponse {
+    // Return response with permissive CORS headers
+    let cors = CorsLayer::permissive();
+    
+    // Return 204 No Content for OPTIONS, 404 for others
+    ([
+        ("Access-Control-Allow-Origin", "*"),
+        ("Access-Control-Allow-Methods", "*"),
+        ("Access-Control-Allow-Headers", "*")
+    ], axum::http::StatusCode::NO_CONTENT)
 }
