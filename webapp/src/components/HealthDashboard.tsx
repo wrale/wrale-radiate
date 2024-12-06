@@ -5,7 +5,7 @@ import { useWebSocket } from '../hooks/useWebSocket'
 
 type DisplayStatus = {
   id: string
-  status: 'online' | 'offline' | 'playing' | 'error'
+  status: 'playing' | 'ready' | 'error' | 'offline'
   lastUpdate: string
   currentContent?: string
   error?: string
@@ -63,6 +63,8 @@ export function HealthDashboard() {
                       ? 'bg-green-100 text-green-800'
                       : display.status === 'ready'
                       ? 'bg-blue-100 text-blue-800'
+                      : display.status === 'offline'
+                      ? 'bg-gray-100 text-gray-800'
                       : 'bg-red-100 text-red-800'
                   }`}
                 >
