@@ -7,12 +7,12 @@ use axum::{
     response::IntoResponse,
     routing::get,
     Router,
+    http::Method,
 };
 use futures::{sink::SinkExt, stream::StreamExt};
 use tokio::sync::broadcast;
-use tower_http::cors::{CorsLayer, Any};
+use tower_http::cors::CorsLayer;
 use tracing_subscriber::fmt::format::FmtSpan;
-use http::Method;
 
 #[derive(Debug, Clone)]
 struct AppState {
@@ -36,25 +36,22 @@ async fn main() {
         connected_clients: Arc::new(tokio::sync::Mutex::new(HashSet::new())),
     };
 
-    // Build CORS layer
-    let cors = CorsLayer::new()
-        .allow_methods([Method::GET, Method::POST])
-        .allow_origin(Any)
-        .allow_headers(Any);
-
-    // Create the route first
-    let routes = Router::new().route("/ws", get(ws_handler));
-
-    // Then apply CORS and state
-    let app = routes
-        .layer(cors)
-        .with_state(state);
+    // Create the base router
+    let app = Router::new()
+        .route("/ws", get(ws_handler))
+        .with_state(state)
+        .layer(
+            CorsLayer::new()
+                .allow_methods([Method::GET])
+                .allow_origin(tower_http::cors::Any)
+        );
 
     // Run it
     let addr = SocketAddr::from(([0, 0, 0, 0], 3001));
     tracing::info!("listening on {}", addr);
     
     let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
+    tracing::info!("server started on {}", addr);
     axum::serve(listener, app).await.unwrap();
 }
 
