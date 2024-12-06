@@ -7,9 +7,9 @@ use axum::{
     response::IntoResponse,
     routing::get,
     Router,
-    http::Method,
 };
 use futures::{sink::SinkExt, stream::StreamExt};
+use http::Method;
 use tokio::sync::broadcast;
 use tower_http::cors::{CorsLayer, Any};
 use tracing_subscriber::fmt::format::FmtSpan;
@@ -36,15 +36,17 @@ async fn main() {
         connected_clients: Arc::new(tokio::sync::Mutex::new(HashSet::new())),
     };
 
-    // Create the base router
-    let cors = CorsLayer::new()
-        .allow_origin(Any)
-        .allow_methods(vec![Method::GET]);
-
-    let app = Router::new()
+    // Create the base router first
+    let router = Router::new()
         .route("/ws", get(ws_handler))
-        .layer(cors)
         .with_state(state);
+
+    // Then apply CORS - making sure to use tower-http's CorsLayer correctly
+    let app = router.layer(
+        CorsLayer::new()
+            .allow_methods([Method::GET])
+            .allow_origin(Any)
+    );
 
     // Run it
     let addr = SocketAddr::from(([0, 0, 0, 0], 3001));
