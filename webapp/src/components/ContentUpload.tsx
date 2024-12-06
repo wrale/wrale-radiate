@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react'
+import { useWebSocket } from '../hooks/useWebSocket'
 
 export function ContentUpload() {
   const [uploading, setUploading] = useState(false)
@@ -8,6 +9,20 @@ export function ContentUpload() {
   const [success, setSuccess] = useState('')
   const [videoUrl, setVideoUrl] = useState('')
   const [uploadMethod, setUploadMethod] = useState<'file' | 'url'>('file')
+
+  const { sendMessage, isConnected } = useWebSocket({
+    onConnected: () => console.log('Connected to WebSocket server'),
+    onDisconnected: () => console.log('Disconnected from WebSocket server')
+  })
+
+  const notifyDisplays = async (url: string) => {
+    const playMessage = {
+      type: 'play',
+      url,
+      contentId: `content-${Date.now()}` // Simple unique ID generation
+    }
+    sendMessage(playMessage)
+  }
 
   const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!e.target.files || !e.target.files[0]) return
@@ -32,7 +47,10 @@ export function ContentUpload() {
         throw new Error(data.error || 'Upload failed')
       }
 
-      setSuccess('File uploaded successfully!')
+      // Send play command to displays via WebSocket
+      await notifyDisplays(data.url)
+
+      setSuccess('File uploaded and distributed successfully!')
       e.target.value = '' // Reset input
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Upload failed')
@@ -64,7 +82,10 @@ export function ContentUpload() {
         throw new Error(data.error || 'URL upload failed')
       }
 
-      setSuccess('Video from URL processed successfully!')
+      // Send play command to displays via WebSocket
+      await notifyDisplays(data.url)
+
+      setSuccess('Video processed and distributed successfully!')
       setVideoUrl('') // Reset input
     } catch (err) {
       setError(err instanceof Error ? err.message : 'URL upload failed')
@@ -89,6 +110,10 @@ export function ContentUpload() {
           Use URL
         </button>
       </div>
+
+      {!isConnected && (
+        <p className="text-yellow-500">⚠️ WebSocket disconnected - displays may not update</p>
+      )}
 
       {uploadMethod === 'file' ? (
         <div>
