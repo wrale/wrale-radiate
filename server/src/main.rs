@@ -7,17 +7,21 @@ use axum::{
     response::IntoResponse,
     routing::get,
     Router,
+    http::Method,
+    error_handling::HandleErrorLayer,
 };
 use futures::{sink::SinkExt, stream::StreamExt};
-use http::Method;
 use tokio::sync::broadcast;
-use tower_http::cors::{CorsLayer, Any};
+use tower_http::cors::CorsLayer;
 use tracing_subscriber::fmt::format::FmtSpan;
 
-#[derive(Debug, Clone)]
+// Add middleware stack type
+type SharedState = Arc<AppState>;
+
+#[derive(Debug)]
 struct AppState {
     tx: broadcast::Sender<String>,
-    connected_clients: Arc<tokio::sync::Mutex<HashSet<String>>>,
+    connected_clients: tokio::sync::Mutex<HashSet<String>>,
 }
 
 #[tokio::main]
@@ -31,22 +35,22 @@ async fn main() {
     let (tx, _rx) = broadcast::channel(100);
     
     // Create shared state
-    let state = AppState {
+    let state = Arc::new(AppState {
         tx,
-        connected_clients: Arc::new(tokio::sync::Mutex::new(HashSet::new())),
-    };
+        connected_clients: tokio::sync::Mutex::new(HashSet::new()),
+    });
 
-    // Create the base router first
-    let router = Router::new()
+    // Build our application
+    let app = Router::new()
         .route("/ws", get(ws_handler))
-        .with_state(state);
-
-    // Then apply CORS - making sure to use tower-http's CorsLayer correctly
-    let app = router.layer(
-        CorsLayer::new()
-            .allow_methods([Method::GET])
-            .allow_origin(Any)
-    );
+        .with_state(state)
+        .layer(
+            tower::ServiceBuilder::new()
+                .layer(HandleErrorLayer::new(handle_error))
+                .layer(
+                    CorsLayer::permissive()
+                )
+        );
 
     // Run it
     let addr = SocketAddr::from(([0, 0, 0, 0], 3001));
@@ -57,14 +61,18 @@ async fn main() {
     axum::serve(listener, app).await.unwrap();
 }
 
+async fn handle_error(error: axum::BoxError) -> impl IntoResponse {
+    (axum::http::StatusCode::INTERNAL_SERVER_ERROR, format!("{}", error))
+}
+
 async fn ws_handler(
     ws: WebSocketUpgrade,
-    axum::extract::State(state): axum::extract::State<AppState>,
+    axum::extract::State(state): axum::extract::State<SharedState>,
 ) -> impl IntoResponse {
     ws.on_upgrade(|socket| handle_socket(socket, state))
 }
 
-async fn handle_socket(socket: WebSocket, state: AppState) {
+async fn handle_socket(socket: WebSocket, state: SharedState) {
     let (mut sender, mut receiver) = socket.split();
     
     // Generate unique client ID
