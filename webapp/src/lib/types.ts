@@ -1,7 +1,7 @@
 export interface HealthUpdate {
   type: 'health'
   displayId: string
-  status: 'playing' | 'ready' | 'error'
+  status: 'playing' | 'ready' | 'error' | 'offline'
   contentId?: string
   error?: string
   timestamp?: number
