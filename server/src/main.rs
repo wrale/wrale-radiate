@@ -6,10 +6,11 @@ use axum::{
     extract::ws::{Message, WebSocket, WebSocketUpgrade},
     response::{IntoResponse, Response},
     routing::get,
-    Router,
+    Json, Router,
 };
 use axum_extra::headers::{AccessControlAllowOrigin, HeaderMapExt};
 use futures::{sink::SinkExt, stream::StreamExt};
+use serde_json::Value;
 use tokio::sync::broadcast;
 use tracing_subscriber::fmt::format::FmtSpan;
 
@@ -38,9 +39,10 @@ async fn main() {
         connected_clients: tokio::sync::Mutex::new(HashSet::new()),
     });
 
-    // Build our application
+    // Build our application with CORS middleware
     let app = Router::new()
         .route("/ws", get(ws_handler))
+        .route("/health", get(health_check))
         .with_state(state);
 
     // Run it
@@ -50,6 +52,17 @@ async fn main() {
     let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
     tracing::info!("server started on {}", addr);
     axum::serve(listener, app).await.unwrap();
+}
+
+async fn health_check(
+    axum::extract::State(state): axum::extract::State<SharedState>,
+) -> Json<Value> {
+    let client_count = state.connected_clients.lock().await.len();
+    Json(serde_json::json!({
+        "status": "ok",
+        "connected_clients": client_count,
+        "timestamp": chrono::Utc::now().to_rfc3339()
+    }))
 }
 
 async fn ws_handler(
@@ -108,10 +121,28 @@ async fn handle_socket(socket: WebSocket, state: SharedState) {
     let tx = state.tx.clone();
     let mut recv_task = tokio::spawn(async move {
         while let Some(Ok(Message::Text(text))) = receiver.next().await {
-            // Broadcast received message
-            if let Err(e) = tx.send(text) {
-                tracing::error!("Error broadcasting message: {}", e);
-                break;
+            match serde_json::from_str::<Value>(&text) {
+                Ok(msg) => {
+                    // Add client_id to health updates
+                    let msg = if msg["type"] == "health" {
+                        let mut msg = msg.as_object().unwrap().clone();
+                        msg.insert("displayId".to_string(), client_id.clone().into());
+                        serde_json::to_string(&msg)
+                    } else {
+                        Ok(text)
+                    };
+
+                    if let Ok(msg) = msg {
+                        if let Err(e) = tx.send(msg) {
+                            tracing::error!("Error broadcasting message: {}", e);
+                            break;
+                        }
+                    }
+                }
+                Err(e) => {
+                    tracing::error!("Error parsing message: {}", e);
+                    continue;
+                }
             }
         }
     });
@@ -127,5 +158,16 @@ async fn handle_socket(socket: WebSocket, state: SharedState) {
         let mut clients = state.connected_clients.lock().await;
         clients.remove(&client_id);
         tracing::info!("Client disconnected: {}", client_id);
+
+        // Broadcast disconnect event
+        let disconnect_msg = serde_json::json!({
+            "type": "health",
+            "displayId": client_id,
+            "status": "offline",
+            "timestamp": chrono::Utc::now().to_rfc3339()
+        });
+        if let Ok(msg) = serde_json::to_string(&disconnect_msg) {
+            let _ = state.tx.send(msg);
+        }
     }
 }
