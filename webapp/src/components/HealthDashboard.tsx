@@ -1,47 +1,51 @@
 'use client';
 
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
+import { useWebSocket } from '../hooks/useWebSocket'
 
 type DisplayStatus = {
   id: string
-  status: 'online' | 'offline'
+  status: 'online' | 'offline' | 'playing' | 'error'
   lastUpdate: string
+  currentContent?: string
+  error?: string
 }
 
 export function HealthDashboard() {
   const [displays, setDisplays] = useState<DisplayStatus[]>([])
 
-  useEffect(() => {
-    // WebSocket connection for real-time updates
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-    const ws = new WebSocket(`${protocol}//${window.location.host}/api/ws`)
+  const { isConnected } = useWebSocket({
+    onMessage: (data) => {
+      if (data.type === 'health') {
+        setDisplays(current => {
+          const index = current.findIndex(d => d.id === data.displayId)
+          const newStatus: DisplayStatus = {
+            id: data.displayId,
+            status: data.status,
+            lastUpdate: new Date().toISOString(),
+            ...(data.contentId && { currentContent: data.contentId }),
+            ...(data.error && { error: data.error })
+          }
 
-    ws.onmessage = (event) => {
-      try {
-        const data = JSON.parse(event.data)
-        if (data.type === 'status') {
-          setDisplays(current => {
-            const index = current.findIndex(d => d.id === data.id)
-            if (index >= 0) {
-              return [
-                ...current.slice(0, index),
-                { ...data, lastUpdate: new Date().toISOString() },
-                ...current.slice(index + 1)
-              ]
-            }
-            return [...current, { ...data, lastUpdate: new Date().toISOString() }]
-          })
-        }
-      } catch (error) {
-        console.error('WebSocket message error:', error)
+          if (index >= 0) {
+            return [
+              ...current.slice(0, index),
+              newStatus,
+              ...current.slice(index + 1)
+            ]
+          }
+          return [...current, newStatus]
+        })
       }
     }
-
-    return () => ws.close()
-  }, [])
+  })
 
   return (
     <div className="space-y-4">
+      {!isConnected && (
+        <p className="text-yellow-500 mb-4">⚠️ WebSocket disconnected - display status may be outdated</p>
+      )}
+
       {displays.length === 0 ? (
         <p className="text-gray-500">No displays connected</p>
       ) : (
@@ -55,14 +59,29 @@ export function HealthDashboard() {
                 <h3 className="font-medium">{display.id}</h3>
                 <span
                   className={`px-2 py-1 rounded text-sm ${
-                    display.status === 'online'
+                    display.status === 'playing'
                       ? 'bg-green-100 text-green-800'
+                      : display.status === 'ready'
+                      ? 'bg-blue-100 text-blue-800'
                       : 'bg-red-100 text-red-800'
                   }`}
                 >
                   {display.status}
                 </span>
               </div>
+              
+              {display.currentContent && (
+                <p className="text-sm text-gray-600 mt-2">
+                  Content: {display.currentContent}
+                </p>
+              )}
+              
+              {display.error && (
+                <p className="text-sm text-red-500 mt-1">
+                  Error: {display.error}
+                </p>
+              )}
+              
               <p className="text-sm text-gray-500 mt-2">
                 Last update: {new Date(display.lastUpdate).toLocaleString()}
               </p>
