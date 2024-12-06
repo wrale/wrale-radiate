@@ -9,8 +9,9 @@ use axum::{
     Router,
 };
 use futures::{sink::SinkExt, stream::StreamExt};
+use hyper::server::Server;
 use tokio::sync::broadcast;
-use tower_http::cors::{CorsLayer, Any};
+use tower_http::cors::CorsLayer;
 use tracing_subscriber::fmt::format::FmtSpan;
 
 #[derive(Debug, Clone)]
@@ -36,10 +37,7 @@ async fn main() {
     };
 
     // Build our application with a route
-    let cors = CorsLayer::new()
-        .allow_origin(Any)
-        .allow_methods(Any)
-        .allow_headers(Any);
+    let cors = CorsLayer::very_permissive();
 
     let app = Router::new()
         .route("/ws", get(ws_handler))
@@ -49,10 +47,13 @@ async fn main() {
     // Run it
     let addr = SocketAddr::from(([0, 0, 0, 0], 3001));
     tracing::info!("listening on {}", addr);
-    axum::Server::bind(&addr)
-        .serve(app.into_make_service())
-        .await
-        .unwrap();
+    
+    let server = Server::bind(&addr)
+        .serve(app.into_make_service());
+
+    if let Err(e) = server.await {
+        tracing::error!("server error: {}", e);
+    }
 }
 
 async fn ws_handler(
