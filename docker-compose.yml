@@ -17,13 +17,14 @@ services:
       - MINIO_PORT=9000
       - MINIO_ACCESS_KEY=minioadmin
       - MINIO_SECRET_KEY=minioadmin
-      - WS_ALLOWED_ORIGINS=http://localhost:3001
+      - NEXT_PUBLIC_WS_URL=ws://localhost:3002
     networks:
       - wrale-net
     depends_on:
       - minio
+      - websocket-server
 
-  # MinIO for asset storage (simpler than S3 for local dev)
+  # MinIO for asset storage
   minio:
     image: minio/minio
     ports:
@@ -38,7 +39,7 @@ services:
     networks:
       - wrale-net
 
-  # Display client simulator (for testing)
+  # Display client simulator
   display-client:
     build:
       context: .
@@ -46,11 +47,22 @@ services:
     ports:
       - "3001:3000"
     environment:
-      - NEXT_PUBLIC_SERVER_PORT=3000
+      - NEXT_PUBLIC_WS_URL=ws://localhost:3002
     networks:
       - wrale-net
     depends_on:
       - webapp
+      - websocket-server
+
+  # Rust WebSocket server
+  websocket-server:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    ports:
+      - "3002:3001"
+    networks:
+      - wrale-net
 
 networks:
   wrale-net:
