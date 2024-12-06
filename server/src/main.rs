@@ -7,11 +7,13 @@ use axum::{
     response::{IntoResponse, Response},
     routing::get,
     Json, Router,
+    http::{HeaderValue, Method},
 };
 use axum_extra::headers::{AccessControlAllowOrigin, HeaderMapExt};
 use futures::{sink::SinkExt, stream::StreamExt};
 use serde_json::Value;
 use tokio::sync::broadcast;
+use tower_http::cors::CorsLayer;
 use tracing_subscriber::fmt::format::FmtSpan;
 
 // Add middleware stack type
@@ -39,13 +41,21 @@ async fn main() {
         connected_clients: tokio::sync::Mutex::new(HashSet::new()),
     });
 
-    // Build our application with CORS middleware
+    // Configure CORS
+    let cors = CorsLayer::new()
+        .allow_methods([Method::GET, Method::POST])
+        .allow_origin("*".parse::<HeaderValue>().unwrap())
+        .allow_headers(tower_http::cors::Any)
+        .expose_headers(tower_http::cors::Any);
+
+    // Build our application
     let app = Router::new()
         .route("/ws", get(ws_handler))
         .route("/health", get(health_check))
+        .layer(cors)
         .with_state(state);
 
-    // Run it on port 3002
+    // Run it
     let addr = SocketAddr::from(([0, 0, 0, 0], 3002));
     tracing::info!("listening on {}", addr);
     
@@ -69,12 +79,21 @@ async fn ws_handler(
     ws: WebSocketUpgrade,
     axum::extract::State(state): axum::extract::State<SharedState>,
 ) -> Response {
+    // Log the upgrade request
+    tracing::info!("Received WebSocket upgrade request");
+    
     // Add CORS headers directly to the response
     let mut response = ws
         .on_upgrade(|socket| handle_socket(socket, state))
         .into_response();
         
-    response.headers_mut().typed_insert(AccessControlAllowOrigin::ANY);
+    let headers = response.headers_mut();
+    headers.typed_insert(AccessControlAllowOrigin::ANY);
+    headers.insert(
+        "Sec-WebSocket-Protocol",
+        HeaderValue::from_static("wrale-radiate")
+    );
+    
     response
 }
 
@@ -107,6 +126,19 @@ async fn handle_socket(socket: WebSocket, state: SharedState) {
         }
     }
 
+    // Start heartbeat task
+    let client_id_heartbeat = client_id.clone();
+    let heartbeat_task = tokio::spawn(async move {
+        let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(30));
+        loop {
+            interval.tick().await;
+            if let Err(e) = sender.send(Message::Ping(vec![])).await {
+                tracing::error!("Error sending ping to {}: {}", client_id_heartbeat, e);
+                break;
+            }
+        }
+    });
+
     // Handle incoming messages
     let mut send_task = tokio::spawn(async move {
         while let Ok(msg) = rx.recv().await {
@@ -119,39 +151,61 @@ async fn handle_socket(socket: WebSocket, state: SharedState) {
 
     // Handle messages from client
     let tx = state.tx.clone();
-    let client_id_clone = client_id.clone(); // Clone for the task
+    let client_id_clone = client_id.clone();
     let mut recv_task = tokio::spawn(async move {
-        while let Some(Ok(Message::Text(text))) = receiver.next().await {
-            match serde_json::from_str::<Value>(&text) {
-                Ok(msg) => {
-                    // Add client_id to health updates
-                    let msg = if msg["type"] == "health" {
-                        let mut msg = msg.as_object().unwrap().clone();
-                        msg.insert("displayId".to_string(), client_id_clone.clone().into());
-                        serde_json::to_string(&msg)
-                    } else {
-                        Ok(text)
-                    };
+        while let Some(Ok(msg)) = receiver.next().await {
+            match msg {
+                Message::Text(text) => {
+                    match serde_json::from_str::<Value>(&text) {
+                        Ok(msg) => {
+                            // Add client_id to health updates
+                            let msg = if msg["type"] == "health" {
+                                let mut msg = msg.as_object().unwrap().clone();
+                                msg.insert("displayId".to_string(), client_id_clone.clone().into());
+                                serde_json::to_string(&msg)
+                            } else {
+                                Ok(text)
+                            };
 
-                    if let Ok(msg) = msg {
-                        if let Err(e) = tx.send(msg) {
-                            tracing::error!("Error broadcasting message: {}", e);
-                            break;
+                            if let Ok(msg) = msg {
+                                if let Err(e) = tx.send(msg) {
+                                    tracing::error!("Error broadcasting message: {}", e);
+                                    break;
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            tracing::error!("Error parsing message: {}", e);
+                            continue;
                         }
                     }
                 }
-                Err(e) => {
-                    tracing::error!("Error parsing message: {}", e);
-                    continue;
+                Message::Ping(data) => {
+                    if let Err(e) = sender.send(Message::Pong(data)).await {
+                        tracing::error!("Error sending pong: {}", e);
+                        break;
+                    }
                 }
+                Message::Close(_) => break,
+                _ => {}
             }
         }
     });
 
-    // Wait for either task to finish
+    // Wait for any task to finish
     tokio::select! {
-        _ = (&mut send_task) => recv_task.abort(),
-        _ = (&mut recv_task) => send_task.abort(),
+        _ = (&mut send_task) => {
+            recv_task.abort();
+            heartbeat_task.abort();
+        },
+        _ = (&mut recv_task) => {
+            send_task.abort();
+            heartbeat_task.abort();
+        },
+        _ = heartbeat_task => {
+            send_task.abort();
+            recv_task.abort();
+        }
     };
 
     // Remove client from connected set
