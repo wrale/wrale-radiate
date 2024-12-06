@@ -5,17 +5,18 @@ use uuid::Uuid;
 
 use crate::state::AppState;
 
-pub async fn handle_socket(socket: WebSocket, state: AppState) {
+pub async fn handle_socket(mut socket: WebSocket, state: AppState) {
     let (mut sender, mut receiver) = socket.split();
     
     // Generate unique client ID
     let client_id = Uuid::new_v4().to_string();
+    tracing::info!(client_id, "Beginning WebSocket connection");
     
     // Add client to connected set
     {
         let mut clients = state.connected_clients.lock().await;
         clients.insert(client_id.clone());
-        tracing::info!("Client connected: {}", client_id);
+        tracing::info!(client_id, "Client registered in connected set");
     }
 
     // Create a channel for sending messages to the WebSocket
@@ -32,7 +33,10 @@ pub async fn handle_socket(socket: WebSocket, state: AppState) {
     });
     
     if let Ok(msg) = serde_json::to_string(&welcome_msg) {
-        let _ = tx_socket.send(Message::Text(msg)).await;
+        tracing::debug!(client_id, "Sending welcome message");
+        if let Err(e) = tx_socket.send(Message::Text(msg)).await {
+            tracing::error!(client_id, error = ?e, "Failed to send welcome message");
+        }
     }
 
     // Start all tasks using a single select!
@@ -49,6 +53,7 @@ pub async fn handle_socket(socket: WebSocket, state: AppState) {
                     Some(Ok(msg)) => {
                         match msg {
                             Message::Text(text) => {
+                                tracing::debug!(client_id, text = ?text, "Received text message");
                                 match serde_json::from_str::<Value>(&text) {
                                     Ok(msg) => {
                                         // Add client_id to health updates
@@ -61,24 +66,40 @@ pub async fn handle_socket(socket: WebSocket, state: AppState) {
                                         };
 
                                         if let Ok(msg) = msg {
-                                            let _ = tx.send(msg);
+                                            if let Err(e) = tx.send(msg) {
+                                                tracing::error!(client_id, error = ?e, "Failed to broadcast message");
+                                            }
                                         }
                                     }
                                     Err(e) => {
-                                        tracing::error!("Error parsing message: {}", e);
+                                        tracing::error!(client_id, error = ?e, message = ?text, "Error parsing message");
                                     }
                                 }
                             }
                             Message::Ping(data) => {
-                                let _ = tx_socket_send.send(Message::Pong(data)).await;
+                                tracing::debug!(client_id, "Received ping");
+                                if let Err(e) = tx_socket_send.send(Message::Pong(data)).await {
+                                    tracing::error!(client_id, error = ?e, "Failed to send pong");
+                                }
                             }
-                            Message::Close(_) => {
+                            Message::Close(reason) => {
+                                tracing::info!(client_id, reason = ?reason, "Received close frame");
                                 tasks_complete = true;
                             }
-                            _ => {}
+                            Message::Pong(_) => {
+                                tracing::debug!(client_id, "Received pong");
+                            }
+                            other => {
+                                tracing::warn!(client_id, message = ?other, "Received unexpected message type");
+                            }
                         }
                     }
-                    _ => {
+                    Some(Err(e)) => {
+                        tracing::error!(client_id, error = ?e, "WebSocket receive error");
+                        tasks_complete = true;
+                    }
+                    None => {
+                        tracing::info!(client_id, "WebSocket stream ended");
                         tasks_complete = true;
                     }
                 }
@@ -86,21 +107,22 @@ pub async fn handle_socket(socket: WebSocket, state: AppState) {
             // Handle outgoing messages to client
             Some(msg) = rx_socket.recv() => {
                 if let Err(e) = sender.send(msg).await {
-                    tracing::error!("Error sending message: {}", e);
+                    tracing::error!(client_id, error = ?e, "Error sending message");
                     tasks_complete = true;
                 }
             }
             // Handle broadcast messages
             Ok(msg) = rx.recv() => {
                 if let Err(e) = tx_socket_send.send(Message::Text(msg)).await {
-                    tracing::error!("Error forwarding broadcast: {}", e);
+                    tracing::error!(client_id, error = ?e, "Error forwarding broadcast");
                     tasks_complete = true;
                 }
             }
             // Send periodic heartbeat
             _ = tokio::time::sleep(tokio::time::Duration::from_secs(30)) => {
+                tracing::debug!(client_id, "Sending heartbeat ping");
                 if let Err(e) = tx_socket_send.send(Message::Ping(vec![])).await {
-                    tracing::error!("Error sending ping: {}", e);
+                    tracing::error!(client_id, error = ?e, "Error sending ping");
                     tasks_complete = true;
                 }
             }
@@ -111,7 +133,7 @@ pub async fn handle_socket(socket: WebSocket, state: AppState) {
     {
         let mut clients = state.connected_clients.lock().await;
         clients.remove(&client_id);
-        tracing::info!("Client disconnected: {}", client_id);
+        tracing::info!(client_id, "Client removed from connected set");
 
         // Broadcast disconnect event
         let disconnect_msg = serde_json::json!({
@@ -121,7 +143,11 @@ pub async fn handle_socket(socket: WebSocket, state: AppState) {
             "timestamp": chrono::Utc::now().to_rfc3339()
         });
         if let Ok(msg) = serde_json::to_string(&disconnect_msg) {
-            let _ = state.tx.send(msg);
+            if let Err(e) = state.tx.send(msg) {
+                tracing::error!(client_id, error = ?e, "Failed to broadcast disconnect");
+            }
         }
     }
+
+    tracing::info!(client_id, "WebSocket handler completed");
 }
