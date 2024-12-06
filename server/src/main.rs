@@ -8,7 +8,7 @@ use axum::{
     response::{IntoResponse, Response},
     routing::get,
     Json, Router,
-    http::{Method, HeaderValue},
+    http::HeaderValue,
 };
 use axum_extra::headers::{AccessControlAllowOrigin, HeaderMapExt};
 use futures::{sink::SinkExt, stream::StreamExt};
@@ -42,19 +42,19 @@ async fn main() {
         connected_clients: tokio::sync::Mutex::new(HashSet::new()),
     });
 
-    // Configure CORS
-    let cors = CorsLayer::new()
-        .allow_origin(Any)
-        .allow_methods(Any)
-        .allow_headers(Any)
-        .max_age(Duration::from_secs(3600));
-
-    // Build our application
+    // Build our application with WebSocket and health routes
     let app = Router::new()
         .route("/ws", get(ws_handler))
         .route("/health", get(health_check))
-        .layer(cors)
-        .with_state(state);
+        .with_state(state)
+        // Add CORS support as the final layer
+        .layer(
+            CorsLayer::new()
+                .allow_origin(Any)
+                .allow_methods(Any)
+                .allow_headers(Any)
+                .max_age(Duration::from_secs(3600))
+        );
 
     // Run it
     let addr = SocketAddr::from(([0, 0, 0, 0], 3002));
